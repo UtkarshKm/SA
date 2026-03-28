@@ -130,6 +130,7 @@ const app = express();
 const upload = multer({ storage: multer.memoryStorage() });
 const analyzer = new SentimentAnalyzer();
 const PORT = Number(process.env.PORT || 3001);
+const HOST = process.env.HOST || "0.0.0.0";
 
 app.use(cors({ origin: true, credentials: true }));
 app.use((request, _response, next) => {
@@ -139,6 +140,14 @@ app.use((request, _response, next) => {
 
 app.all("/api/auth/*", authHandler);
 app.use(express.json({ limit: "2mb" }));
+
+app.get("/api/health", (_request, response) => {
+  response.json({
+    ok: true,
+    service: "sentiment-analysis-api",
+    timestamp: new Date().toISOString()
+  });
+});
 
 function paginateRows(rows, { page = 1, pageSize = 20, search = "", sentiment = "ALL" }) {
   const normalizedSearch = search.trim().toLowerCase();
@@ -515,6 +524,6 @@ app.use((error, _request, response, _next) => {
 
 await connectDatabase();
 
-app.listen(PORT, () => {
-  console.log(`Sentiment app server listening on http://localhost:${PORT}`);
+app.listen(PORT, HOST, () => {
+  console.log(`Sentiment app server listening on http://${HOST}:${PORT}`);
 });

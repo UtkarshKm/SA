@@ -353,6 +353,31 @@ What to do in production:
   - `x-real-ip`
 - if needed, extend Better Auth proxy/IP settings further for your deployment environment
 
+## Render Deployment
+
+For Render, use a `Web Service` connected to the `main` branch.
+
+Recommended settings:
+
+- Build command: `npm install && npm run build`
+- Start command: `npm start`
+- Health check path: `/api/health`
+
+Required Render environment variables:
+
+- `PORT`
+- `MONGODB_URI`
+- `BETTER_AUTH_SECRET`
+- `BETTER_AUTH_URL=https://your-app-name.onrender.com`
+- `BETTER_AUTH_TRUSTED_ORIGINS=https://your-app-name.onrender.com`
+
+Production notes:
+
+- the server now binds to `0.0.0.0` by default so Render can route traffic to it
+- `/api/health` returns a lightweight JSON status payload for Render health checks
+- keep `BETTER_AUTH_URL` and `BETTER_AUTH_TRUSTED_ORIGINS` aligned with your Render app URL
+- large CSV runs may be slower on smaller Render instances because sentiment inference runs on CPU
+
 ## Notes
 
 - If the Hugging Face runtime is unavailable, the app falls back to a lightweight rule-based sentiment analyzer.
