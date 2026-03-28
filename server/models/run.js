@@ -62,6 +62,16 @@ const summarySchema = new mongoose.Schema(
   { _id: false }
 );
 
+const progressEventSchema = new mongoose.Schema(
+  {
+    stage: { type: String, required: true, trim: true },
+    message: { type: String, required: true, trim: true },
+    percent: { type: Number, required: true, min: 0, max: 100 },
+    createdAt: { type: Date, required: true, default: Date.now }
+  },
+  { _id: false }
+);
+
 const runSchema = new mongoose.Schema(
   {
     userId: { type: String, required: true, trim: true, index: true },
@@ -70,13 +80,35 @@ const runSchema = new mongoose.Schema(
     textColumn: { type: String, required: true, trim: true },
     detectedTextColumn: { type: String, default: "", trim: true },
     columns: { type: [String], default: [] },
-    status: { type: String, required: true, trim: true },
-    rowCount: { type: Number, required: true },
-    validRowCount: { type: Number, required: true },
-    removedCount: { type: Number, required: true },
-    modelMode: { type: String, required: true, trim: true },
-    modelName: { type: String, required: true, trim: true },
-    summary: { type: summarySchema, required: true },
+    status: {
+      type: String,
+      required: true,
+      trim: true,
+      enum: ["queued", "processing", "completed", "failed", "canceled"]
+    },
+    rowCount: { type: Number, required: true, default: 0 },
+    validRowCount: { type: Number, required: true, default: 0 },
+    removedCount: { type: Number, required: true, default: 0 },
+    modelMode: { type: String, required: true, trim: true, default: "pending" },
+    modelName: { type: String, required: true, trim: true, default: "pending" },
+    progressPercent: { type: Number, required: true, default: 0, min: 0, max: 100 },
+    progressStage: { type: String, required: true, trim: true, default: "queued" },
+    progressMessage: { type: String, required: true, trim: true, default: "Run queued." },
+    errorMessage: { type: String, default: "", trim: true },
+    cancelRequested: { type: Boolean, default: false },
+    processingStartedAt: { type: Date, default: null },
+    processingCompletedAt: { type: Date, default: null },
+    lastProcessedAt: { type: Date, default: null },
+    progressEvents: { type: [progressEventSchema], default: [] },
+    summary: {
+      type: summarySchema,
+      required: true,
+      default: () => ({
+        sentimentCounts: { POSITIVE: 0, NEUTRAL: 0, NEGATIVE: 0 },
+        topAspects: [],
+        aspectCoverage: 0
+      })
+    },
     rows: { type: [rowSchema], default: [] }
   },
   {

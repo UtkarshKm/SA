@@ -115,15 +115,27 @@ export class SentimentAnalyzer {
     return this.pipelinePromise;
   }
 
-  async analyze(texts) {
+  async analyze(texts, options = {}) {
     const pipe = await this.getPipeline();
+    const batchSize = Number(options.batchSize || 8);
+    const outputs = [];
 
     if (!pipe) {
-      return texts.map((text) => fallbackSentiment(text));
-    }
+      for (let index = 0; index < texts.length; index += batchSize) {
+        const batch = texts.slice(index, index + batchSize);
+        outputs.push(...batch.map((text) => fallbackSentiment(text)));
 
-    const outputs = [];
-    const batchSize = 8;
+        if (options.onBatchComplete) {
+          await options.onBatchComplete({
+            processed: Math.min(index + batch.length, texts.length),
+            total: texts.length,
+            mode: this.mode
+          });
+        }
+      }
+
+      return outputs;
+    }
 
     for (let index = 0; index < texts.length; index += batchSize) {
       const batch = texts.slice(index, index + batchSize);
@@ -138,6 +150,14 @@ export class SentimentAnalyzer {
           label: normalizeModelLabel(item?.label, confidence),
           confidence,
           source: "transformers"
+        });
+      }
+
+      if (options.onBatchComplete) {
+        await options.onBatchComplete({
+          processed: Math.min(index + normalizedBatch.length, texts.length),
+          total: texts.length,
+          mode: this.mode
         });
       }
     }
