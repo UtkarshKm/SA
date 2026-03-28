@@ -1,24 +1,264 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Link, NavLink, Route, Routes, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import {
+  Link,
+  Navigate,
+  NavLink,
+  Route,
+  Routes,
+  useLocation,
+  useNavigate,
+  useParams,
+  useSearchParams
+} from "react-router-dom";
 import { AspectChart, SentimentChart } from "./components/Charts.jsx";
+import { authClient } from "./lib/authClient.js";
 import { autoDetectTextColumn, previewCsv } from "./lib/csvPreview.js";
 
-function Shell({ children }) {
+async function apiFetch(path, options = {}) {
+  const response = await fetch(path, {
+    credentials: "include",
+    ...options
+  });
+
+  const contentType = response.headers.get("content-type") || "";
+  const data = contentType.includes("application/json") ? await response.json() : null;
+
+  if (!response.ok) {
+    const error = new Error(data?.error || "Request failed.");
+    error.status = response.status;
+    throw error;
+  }
+
+  return data;
+}
+
+function PublicOnlyRoute({ children }) {
+  const { data: session, isPending } = authClient.useSession();
+
+  if (isPending) {
+    return <div className="page-state">Checking session...</div>;
+  }
+
+  if (session?.user) {
+    return <Navigate to="/app" replace />;
+  }
+
+  return children;
+}
+
+function ProtectedRoute({ children }) {
+  const { data: session, isPending } = authClient.useSession();
+  const location = useLocation();
+
+  if (isPending) {
+    return <div className="page-state">Loading workspace...</div>;
+  }
+
+  if (!session?.user) {
+    return <Navigate to="/sign-in" replace state={{ from: location.pathname }} />;
+  }
+
+  return children;
+}
+
+function LandingPage() {
+  return (
+    <div className="public-shell">
+      <header className="marketing-nav">
+        <div className="brand-line">
+          <span className="brand-kicker">Sentiment workspace</span>
+          <strong>Review intelligence</strong>
+        </div>
+        <div className="marketing-actions">
+          <Link className="ghost-link" to="/sign-in">
+            Sign in
+          </Link>
+          <Link className="primary-button" to="/sign-up">
+            Create account
+          </Link>
+        </div>
+      </header>
+
+      <main className="landing-grid">
+        <section className="hero-panel scene-enter">
+          <div className="eyebrow">Email-password auth enabled</div>
+          <h1>Turn product reviews into owned, private analysis workspaces.</h1>
+          <p>
+            Upload CSVs, run sentiment and aspect analysis, and keep every run scoped to the signed-in user who
+            created it.
+          </p>
+          <div className="hero-actions">
+            <Link className="primary-button" to="/sign-up">
+              Start free
+            </Link>
+            <Link className="ghost-link" to="/sign-in">
+              I already have an account
+            </Link>
+          </div>
+        </section>
+
+        <section className="feature-panel scene-enter scene-enter-delay">
+          <div className="section-heading">
+            <span>What the app does</span>
+          </div>
+          <div className="feature-list">
+            <div className="feature-item">
+              <strong>Private run history</strong>
+              <p>Every analysis run belongs to the signed-in user and stays scoped to that account.</p>
+            </div>
+            <div className="feature-item">
+              <strong>CSV-first workflow</strong>
+              <p>Upload reviews, confirm the right text column, and analyze the whole dataset quickly.</p>
+            </div>
+            <div className="feature-item">
+              <strong>Actionable outputs</strong>
+              <p>Review sentiment mix, top aspects, row-level results, and export the enriched CSV anytime.</p>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  );
+}
+
+function AuthPage({ mode }) {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+
+  const redirectTarget = location.state?.from || "/app";
+  const isSignUp = mode === "sign-up";
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+    setSubmitting(true);
+    setError("");
+
+    try {
+      if (isSignUp) {
+        const result = await authClient.signUp.email({
+          name,
+          email,
+          password
+        });
+
+        if (result.error) {
+          throw new Error(result.error.message || "Sign up failed.");
+        }
+      } else {
+        const result = await authClient.signIn.email({
+          email,
+          password
+        });
+
+        if (result.error) {
+          throw new Error(result.error.message || "Sign in failed.");
+        }
+      }
+
+      navigate(redirectTarget, { replace: true });
+    } catch (authError) {
+      setError(authError.message);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="public-shell auth-shell">
+      <div className="auth-card scene-enter">
+        <Link className="back-link" to="/">
+          Back to landing
+        </Link>
+        <div className="eyebrow">{isSignUp ? "Create account" : "Sign in"}</div>
+        <h2>{isSignUp ? "Start your private analysis workspace." : "Return to your analysis workspace."}</h2>
+        <p>
+          {isSignUp
+            ? "Use a name, email, and password to create your account."
+            : "Sign in with the email and password you used when creating your account."}
+        </p>
+
+        <form className="auth-form" onSubmit={handleSubmit}>
+          {isSignUp ? (
+            <label>
+              <span>Name</span>
+              <input value={name} onChange={(event) => setName(event.target.value)} required />
+            </label>
+          ) : null}
+
+          <label>
+            <span>Email</span>
+            <input
+              type="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              required
+            />
+          </label>
+
+          <label>
+            <span>Password</span>
+            <input
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              minLength={8}
+              required
+            />
+          </label>
+
+          {error ? <div className="error-copy">{error}</div> : null}
+
+          <button className="primary-button" disabled={submitting} type="submit">
+            {submitting ? "Working..." : isSignUp ? "Create account" : "Sign in"}
+          </button>
+        </form>
+
+        <div className="auth-switch">
+          {isSignUp ? "Already have an account?" : "Need an account?"}{" "}
+          <Link to={isSignUp ? "/sign-in" : "/sign-up"}>{isSignUp ? "Sign in" : "Create one"}</Link>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PrivateShell({ children }) {
+  const navigate = useNavigate();
+  const { data: session } = authClient.useSession();
+
+  async function handleSignOut() {
+    await authClient.signOut();
+    navigate("/", { replace: true });
+  }
+
   return (
     <div className="app-shell">
       <aside className="nav-rail">
         <div className="brand-block">
           <div className="brand-kicker">Sentiment workspace</div>
           <h1>Review intelligence</h1>
-          <p>Upload review datasets, run local analysis, and revisit every run from one calm workspace.</p>
+          <p>Private runs, Mongo-backed history, and review analysis scoped to your account.</p>
         </div>
 
         <nav className="nav-links">
-          <NavLink to="/" end>
+          <NavLink to="/app" end>
             New analysis
           </NavLink>
-          <NavLink to="/history">History</NavLink>
+          <NavLink to="/app/history">History</NavLink>
         </nav>
+
+        <div className="user-panel">
+          <span>Signed in as</span>
+          <strong>{session?.user?.email || "Unknown user"}</strong>
+          <button className="ghost-button" onClick={handleSignOut} type="button">
+            Sign out
+          </button>
+        </div>
       </aside>
 
       <main className="workspace">{children}</main>
@@ -56,10 +296,9 @@ function UploadPage() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    fetch("/api/config")
-      .then((response) => response.json())
+    apiFetch("/api/config")
       .then((data) => setCategories(data.categories || ["CLOTHING"]))
-      .catch(() => setCategories(["CLOTHING"]));
+      .catch((loadError) => setError(loadError.message));
   }, []);
 
   async function handleFileChange(event) {
@@ -100,13 +339,12 @@ function UploadPage() {
         formData.append("textColumn", textColumn);
       }
 
-      const response = await fetch("/api/runs", { method: "POST", body: formData });
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || "Analysis failed.");
-      }
+      const data = await apiFetch("/api/runs", {
+        method: "POST",
+        body: formData
+      });
 
-      navigate(`/runs/${data.id}`);
+      navigate(`/app/runs/${data.id}`);
     } catch (submissionError) {
       setError(submissionError.message);
     } finally {
@@ -122,8 +360,8 @@ function UploadPage() {
           <h2>Prepare a review dataset for sentiment and aspect analysis.</h2>
         </div>
         <p>
-          The first pass stays focused: upload one CSV, confirm the review column, choose a product category,
-          and run the analysis locally.
+          Upload one CSV, confirm the review column, choose a product category, and save the run under your
+          account.
         </p>
       </header>
 
@@ -225,11 +463,12 @@ function UploadPage() {
 function HistoryPage() {
   const [runs, setRuns] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    fetch("/api/runs")
-      .then((response) => response.json())
+    apiFetch("/api/runs")
       .then((data) => setRuns(data))
+      .catch((loadError) => setError(loadError.message))
       .finally(() => setLoading(false));
   }, []);
 
@@ -244,9 +483,10 @@ function HistoryPage() {
 
       <section className="history-list">
         {loading ? <p>Loading saved runs...</p> : null}
-        {!loading && runs.length === 0 ? <p>No analysis runs have been saved yet.</p> : null}
+        {error ? <p>{error}</p> : null}
+        {!loading && !error && runs.length === 0 ? <p>No analysis runs have been saved yet.</p> : null}
         {runs.map((run) => (
-          <Link className="history-row" to={`/runs/${run.id}`} key={run.id}>
+          <Link className="history-row" to={`/app/runs/${run.id}`} key={run.id}>
             <div>
               <strong>{run.filename}</strong>
               <span>
@@ -266,9 +506,11 @@ function HistoryPage() {
 
 function ResultsPage() {
   const { runId } = useParams();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   const page = Number(searchParams.get("page") || 1);
   const sentiment = searchParams.get("sentiment") || "ALL";
@@ -276,6 +518,7 @@ function ResultsPage() {
 
   useEffect(() => {
     setLoading(true);
+    setError("");
     const query = new URLSearchParams({
       page: String(page),
       pageSize: "20",
@@ -283,11 +526,24 @@ function ResultsPage() {
       search
     });
 
-    fetch(`/api/runs/${runId}?${query.toString()}`)
-      .then((response) => response.json())
+    apiFetch(`/api/runs/${runId}?${query.toString()}`)
       .then((payload) => setData(payload))
+      .catch((loadError) => {
+        if (loadError.status === 404) {
+          setData(null);
+          setError("Run not found.");
+          return;
+        }
+
+        if (loadError.status === 401) {
+          navigate("/sign-in", { replace: true });
+          return;
+        }
+
+        setError(loadError.message);
+      })
       .finally(() => setLoading(false));
-  }, [page, runId, search, sentiment]);
+  }, [page, runId, search, sentiment, navigate]);
 
   const totalPages = useMemo(() => {
     if (!data?.table) {
@@ -305,10 +561,10 @@ function ResultsPage() {
     );
   }
 
-  if (!data) {
+  if (error || !data) {
     return (
       <section className="scene">
-        <p>Run not found.</p>
+        <p>{error || "Run not found."}</p>
       </section>
     );
   }
@@ -448,14 +704,53 @@ function ResultsPage() {
   );
 }
 
+function PrivateApp() {
+  return (
+    <PrivateShell>
+      <Routes>
+        <Route index element={<UploadPage />} />
+        <Route path="history" element={<HistoryPage />} />
+        <Route path="runs/:runId" element={<ResultsPage />} />
+      </Routes>
+    </PrivateShell>
+  );
+}
+
 export default function App() {
   return (
-    <Shell>
-      <Routes>
-        <Route path="/" element={<UploadPage />} />
-        <Route path="/history" element={<HistoryPage />} />
-        <Route path="/runs/:runId" element={<ResultsPage />} />
-      </Routes>
-    </Shell>
+    <Routes>
+      <Route
+        path="/"
+        element={
+          <PublicOnlyRoute>
+            <LandingPage />
+          </PublicOnlyRoute>
+        }
+      />
+      <Route
+        path="/sign-in"
+        element={
+          <PublicOnlyRoute>
+            <AuthPage mode="sign-in" />
+          </PublicOnlyRoute>
+        }
+      />
+      <Route
+        path="/sign-up"
+        element={
+          <PublicOnlyRoute>
+            <AuthPage mode="sign-up" />
+          </PublicOnlyRoute>
+        }
+      />
+      <Route
+        path="/app/*"
+        element={
+          <ProtectedRoute>
+            <PrivateApp />
+          </ProtectedRoute>
+        }
+      />
+    </Routes>
   );
 }

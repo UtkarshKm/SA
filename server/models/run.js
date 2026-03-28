@@ -64,6 +64,7 @@ const summarySchema = new mongoose.Schema(
 
 const runSchema = new mongoose.Schema(
   {
+    userId: { type: String, required: true, trim: true, index: true },
     filename: { type: String, required: true, trim: true },
     category: { type: String, required: true, trim: true, index: true },
     textColumn: { type: String, required: true, trim: true },
@@ -83,6 +84,6 @@ const runSchema = new mongoose.Schema(
   }
 );
 
-runSchema.index({ createdAt: -1 });
+runSchema.index({ userId: 1, createdAt: -1 });
 
 export const RunModel = mongoose.models.Run || mongoose.model("Run", runSchema);
