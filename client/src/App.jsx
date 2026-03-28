@@ -10,7 +10,15 @@ import {
   useParams,
   useSearchParams
 } from "react-router-dom";
-import { AspectChart, SentimentChart } from "./components/Charts.jsx";
+import {
+  AspectChart,
+  AspectCoverageChart,
+  AspectSentimentChart,
+  KeywordBreakdownChart,
+  ReviewLengthChart,
+  SentimentChart,
+  WordCloudPanel
+} from "./components/Charts.jsx";
 import { authClient } from "./lib/authClient.js";
 import { autoDetectTextColumn, previewCsv } from "./lib/csvPreview.js";
 
@@ -637,6 +645,7 @@ function ResultsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [canceling, setCanceling] = useState(false);
+  const [wordCloudSentiment, setWordCloudSentiment] = useState("NEGATIVE");
 
   const page = Number(searchParams.get("page") || 1);
   const sentiment = searchParams.get("sentiment") || "ALL";
@@ -812,9 +821,24 @@ function ResultsPage() {
             <Stat label="Aspect coverage" value={`${data.summary.aspectCoverage}%`} />
           </section>
 
-          <section className="results-grid scene-enter scene-enter-delay-2">
+          <section className="results-grid scene-enter scene-enter-delay-2 results-grid-primary">
             <SentimentChart counts={data.summary.sentimentCounts} />
+            <AspectSentimentChart data={data.aspectSentiment} />
+          </section>
+
+          <section className="results-grid scene-enter scene-enter-delay-2 results-grid-secondary">
             <AspectChart aspects={data.summary.topAspects} />
+            <AspectCoverageChart data={data.aspectCoverageBreakdown} />
+            <ReviewLengthChart data={data.reviewLengthStats} />
+          </section>
+
+          <section className="results-grid scene-enter scene-enter-delay-2 results-grid-exploratory">
+            <KeywordBreakdownChart frequencies={data.tokenFrequencies} />
+            <WordCloudPanel
+              cloud={data.wordCloud}
+              sentiment={wordCloudSentiment}
+              onSentimentChange={setWordCloudSentiment}
+            />
           </section>
 
           <section className="table-stage scene-enter scene-enter-delay-2">
