@@ -19,7 +19,15 @@ A MongoDB-backed full-stack web app built from the original notebook workflow in
 - Manually override the selected text column
 - Choose a product category for aspect extraction
 - Run sentiment analysis across the dataset
-- View sentiment summary, aspect summary, and analyzed rows
+- View a richer results dashboard with:
+  - sentiment distribution
+  - sentiment by aspect
+  - top aspects
+  - aspect coverage
+  - review length by sentiment
+  - keyword breakdown
+  - word cloud
+  - analyzed rows
 - Reopen previous runs from local history
 - Export the enriched CSV
 - Scope runs to the signed-in user only
@@ -93,6 +101,28 @@ This starts:
 7. Click `Run analysis`
 8. Review the results screen
 9. Export the analyzed CSV if needed
+
+## Results Dashboard
+
+Completed runs now include a richer analysis workspace.
+
+The dashboard includes:
+
+- sentiment distribution
+- sentiment by aspect
+- top aspects
+- aspect coverage overview
+- review length by sentiment
+- keyword breakdown for positive vs negative terms
+- word cloud with sentiment focus switcher
+- searchable row table
+
+The word cloud supports:
+
+- `Negative`
+- `Positive`
+- `Neutral`
+- `All`
 
 ## Better Auth Integration
 
@@ -212,7 +242,11 @@ Expected response:
 4. Run analysis
 5. Confirm:
    - sentiment counts render
-   - aspect chart renders
+   - sentiment by aspect chart renders
+   - aspect coverage chart renders
+   - review length chart renders
+   - keyword breakdown chart renders
+   - word cloud renders
    - row table renders
    - export works
    - results show model mode and model name
@@ -322,7 +356,8 @@ What to do in production:
 ## Notes
 
 - If the Hugging Face runtime is unavailable, the app falls back to a lightweight rule-based sentiment analyzer.
-- Advanced notebook features like WordNet synonym expansion and word clouds are not included yet.
+- Word clouds are included as a supporting exploratory visual.
+- Advanced notebook features like WordNet synonym expansion are not included yet.
 - Existing local history is not auto-migrated into MongoDB.
 - Email verification and password reset are not part of v1 yet.
 
@@ -393,6 +428,7 @@ The UI now shows:
 - a timeline of stage updates
 - a cancel button while the run is active
 - status chips in history and on the run page
+- lighter active-run polling that returns progress-only payloads while the run is queued or processing
 
 The backend logs now include stage-level progress such as:
 
@@ -437,3 +473,18 @@ Cancel behavior:
 2. Confirm queued or processing runs show status chips and progress text
 3. Wait for a run to finish
 4. Confirm the status changes to `completed` without needing a manual browser refresh
+
+### Rich dashboard visuals
+
+1. Open a completed run with enough analyzed rows
+2. Confirm the results page shows:
+   - sentiment distribution
+   - sentiment by aspect
+   - top aspects
+   - aspect coverage
+   - review length by sentiment
+   - keyword breakdown
+   - word cloud
+3. Change the word cloud filter between `Negative`, `Positive`, `Neutral`, and `All`
+4. Confirm the word cloud updates correctly
+5. Confirm sparse datasets degrade gracefully without breaking the page
