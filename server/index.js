@@ -19,6 +19,113 @@ import { enqueueRunProcessing } from "./lib/runProcessor.js";
 import { SentimentAnalyzer } from "./lib/sentiment.js";
 import { detectTextColumn } from "./lib/text.js";
 
+const STOPWORDS = new Set([
+  "about",
+  "after",
+  "again",
+  "against",
+  "almost",
+  "also",
+  "among",
+  "and",
+  "another",
+  "any",
+  "are",
+  "around",
+  "because",
+  "been",
+  "before",
+  "being",
+  "between",
+  "both",
+  "but",
+  "came",
+  "can",
+  "could",
+  "did",
+  "does",
+  "doing",
+  "done",
+  "down",
+  "each",
+  "even",
+  "every",
+  "few",
+  "find",
+  "first",
+  "fit",
+  "for",
+  "from",
+  "get",
+  "got",
+  "had",
+  "has",
+  "have",
+  "having",
+  "her",
+  "here",
+  "hers",
+  "him",
+  "his",
+  "how",
+  "into",
+  "its",
+  "just",
+  "like",
+  "look",
+  "made",
+  "make",
+  "many",
+  "more",
+  "most",
+  "much",
+  "need",
+  "not",
+  "now",
+  "off",
+  "often",
+  "one",
+  "only",
+  "onto",
+  "other",
+  "our",
+  "out",
+  "over",
+  "really",
+  "same",
+  "she",
+  "should",
+  "some",
+  "still",
+  "such",
+  "than",
+  "that",
+  "the",
+  "their",
+  "them",
+  "then",
+  "there",
+  "these",
+  "they",
+  "this",
+  "those",
+  "too",
+  "under",
+  "very",
+  "was",
+  "way",
+  "wear",
+  "well",
+  "were",
+  "what",
+  "when",
+  "which",
+  "while",
+  "with",
+  "would",
+  "your"
+]);
+
 const app = express();
 const upload = multer({ storage: multer.memoryStorage() });
 const analyzer = new SentimentAnalyzer();
@@ -69,6 +176,115 @@ function buildExportRows(rows) {
   }));
 }
 
+function tokenize(text) {
+  return String(text || "")
+    .split(/\s+/)
+    .map((token) => token.trim().toLowerCase())
+    .filter((token) => token.length >= 3 && /^[a-z][a-z0-9]*$/i.test(token) && !STOPWORDS.has(token));
+}
+
+function buildTokenList(counter, limit = 12) {
+  return [...counter.entries()]
+    .sort((left, right) => right[1] - left[1])
+    .slice(0, limit)
+    .map(([token, count]) => ({ token, count }));
+}
+
+function buildWordCloudList(counter, limit = 36) {
+  const entries = [...counter.entries()].sort((left, right) => right[1] - left[1]).slice(0, limit);
+  const max = entries[0]?.[1] || 1;
+
+  return entries.map(([text, value]) => ({
+    text,
+    value,
+    weight: Number((value / max).toFixed(3))
+  }));
+}
+
+function buildVisualizations(rows) {
+  const aspectSentimentMap = new Map();
+  const coverage = { withAspects: 0, withoutAspects: 0 };
+  const lengthStatsMap = new Map([
+    ["POSITIVE", { sentiment: "POSITIVE", totalWords: 0, reviews: 0, averageWords: 0 }],
+    ["NEUTRAL", { sentiment: "NEUTRAL", totalWords: 0, reviews: 0, averageWords: 0 }],
+    ["NEGATIVE", { sentiment: "NEGATIVE", totalWords: 0, reviews: 0, averageWords: 0 }]
+  ]);
+  const tokenCounters = {
+    ALL: new Map(),
+    POSITIVE: new Map(),
+    NEUTRAL: new Map(),
+    NEGATIVE: new Map()
+  };
+
+  for (const row of rows) {
+    const sentiment = row.predicted_label;
+    const tokens = tokenize(row.clean_text);
+    const lengthStats = lengthStatsMap.get(sentiment);
+
+    if (lengthStats) {
+      lengthStats.totalWords += tokens.length;
+      lengthStats.reviews += 1;
+    }
+
+    for (const token of tokens) {
+      tokenCounters.ALL.set(token, (tokenCounters.ALL.get(token) || 0) + 1);
+      tokenCounters[sentiment].set(token, (tokenCounters[sentiment].get(token) || 0) + 1);
+    }
+
+    if (row.aspect_count > 0) {
+      coverage.withAspects += 1;
+    } else {
+      coverage.withoutAspects += 1;
+    }
+
+    for (const aspect of row.aspects) {
+      if (!aspectSentimentMap.has(aspect)) {
+        aspectSentimentMap.set(aspect, {
+          aspect,
+          POSITIVE: 0,
+          NEUTRAL: 0,
+          NEGATIVE: 0,
+          total: 0
+        });
+      }
+
+      const entry = aspectSentimentMap.get(aspect);
+      entry[sentiment] += 1;
+      entry.total += 1;
+    }
+  }
+
+  const aspectSentiment = [...aspectSentimentMap.values()]
+    .sort((left, right) => right.total - left.total)
+    .slice(0, 8);
+
+  const reviewLengthStats = [...lengthStatsMap.values()].map((item) => ({
+    sentiment: item.sentiment,
+    averageWords: item.reviews === 0 ? 0 : Number((item.totalWords / item.reviews).toFixed(1)),
+    reviews: item.reviews
+  }));
+
+  return {
+    aspectSentiment,
+    tokenFrequencies: {
+      POSITIVE: buildTokenList(tokenCounters.POSITIVE),
+      NEGATIVE: buildTokenList(tokenCounters.NEGATIVE),
+      NEUTRAL: buildTokenList(tokenCounters.NEUTRAL)
+    },
+    reviewLengthStats,
+    aspectCoverageBreakdown: [
+      { name: "With aspects", value: coverage.withAspects },
+      { name: "Without aspects", value: coverage.withoutAspects }
+    ],
+    wordCloud: {
+      ALL: buildWordCloudList(tokenCounters.ALL),
+      POSITIVE: buildWordCloudList(tokenCounters.POSITIVE),
+      NEUTRAL: buildWordCloudList(tokenCounters.NEUTRAL),
+      NEGATIVE: buildWordCloudList(tokenCounters.NEGATIVE)
+    }
+  };
+}
+
 function buildProgressOnlyResponse(run) {
   return {
     ...run,
@@ -79,10 +295,16 @@ function buildProgressOnlyResponse(run) {
 
 function buildRunResponse(run, pageParams) {
   const hasCompletedResults = run.status === "completed" && Array.isArray(run.rows) && run.rows.length > 0;
+  const visualizations = hasCompletedResults ? buildVisualizations(run.rows) : null;
 
   return {
     ...run,
     hasCompletedResults,
+    aspectSentiment: visualizations?.aspectSentiment || [],
+    tokenFrequencies: visualizations?.tokenFrequencies || null,
+    reviewLengthStats: visualizations?.reviewLengthStats || [],
+    aspectCoverageBreakdown: visualizations?.aspectCoverageBreakdown || [],
+    wordCloud: visualizations?.wordCloud || null,
     table: hasCompletedResults ? paginateRows(run.rows, pageParams) : null
   };
 }
