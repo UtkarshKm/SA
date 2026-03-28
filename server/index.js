@@ -1,10 +1,14 @@
+import fs from "node:fs/promises";
+import path from "node:path";
 import express from "express";
 import cors from "cors";
 import multer from "multer";
 import { CATEGORY_ASPECTS, extractAspects, resolveCategory } from "./lib/aspects.js";
+import { authHandler } from "./lib/auth.js";
+import { requireSession } from "./lib/authSession.js";
 import { parseCsvBuffer, stringifyRows } from "./lib/csv.js";
 import { connectDatabase } from "./lib/db.js";
-import { createRun, getRunById, listRuns } from "./lib/runRepository.js";
+import { createRun, getRunByIdForUser, listRunsByUser } from "./lib/runRepository.js";
 import { SentimentAnalyzer } from "./lib/sentiment.js";
 import { detectTextColumn, filterValidRows, normalizeText } from "./lib/text.js";
 
@@ -13,12 +17,14 @@ const upload = multer({ storage: multer.memoryStorage() });
 const analyzer = new SentimentAnalyzer();
 const PORT = Number(process.env.PORT || 3001);
 
-app.use(cors());
-app.use(express.json({ limit: "2mb" }));
+app.use(cors({ origin: true, credentials: true }));
 app.use((request, _response, next) => {
   console.log(`[${new Date().toISOString()}] ${request.method} ${request.path}`);
   next();
 });
+
+app.all("/api/auth/*", authHandler);
+app.use(express.json({ limit: "2mb" }));
 
 function summarizeRows(rows) {
   const sentimentCounts = { POSITIVE: 0, NEUTRAL: 0, NEGATIVE: 0 };
@@ -103,13 +109,27 @@ function buildExportRows(rows) {
   }));
 }
 
-app.get("/api/config", (_request, response) => {
-  response.json({ categories: Object.keys(CATEGORY_ASPECTS) });
+app.get("/api/config", async (request, response, next) => {
+  try {
+    const session = await requireSession(request, response);
+    if (!session) {
+      return;
+    }
+
+    response.json({ categories: Object.keys(CATEGORY_ASPECTS) });
+  } catch (error) {
+    next(error);
+  }
 });
 
-app.get("/api/runs", async (_request, response, next) => {
+app.get("/api/runs", async (request, response, next) => {
   try {
-    response.json(await listRuns());
+    const session = await requireSession(request, response);
+    if (!session) {
+      return;
+    }
+
+    response.json(await listRunsByUser(session.user.id));
   } catch (error) {
     next(error);
   }
@@ -117,6 +137,11 @@ app.get("/api/runs", async (_request, response, next) => {
 
 app.post("/api/runs", upload.single("file"), async (request, response, next) => {
   try {
+    const session = await requireSession(request, response);
+    if (!session) {
+      return;
+    }
+
     if (!request.file) {
       response.status(400).json({ error: "CSV file is required." });
       return;
@@ -134,7 +159,7 @@ app.post("/api/runs", upload.single("file"), async (request, response, next) => 
     const textColumn = request.body.textColumn || detectedTextColumn;
 
     console.log(
-      `[run:start] file="${request.file.originalname}" category=${category} detectedColumn="${detectedTextColumn}" selectedColumn="${textColumn}" totalRows=${records.length}`
+      `[run:start] user=${session.user.id} file="${request.file.originalname}" category=${category} detectedColumn="${detectedTextColumn}" selectedColumn="${textColumn}" totalRows=${records.length}`
     );
 
     if (!textColumn || !columns.includes(textColumn)) {
@@ -155,6 +180,7 @@ app.post("/api/runs", upload.single("file"), async (request, response, next) => 
     const summary = summarizeRows(storedRows);
 
     const savedRun = await createRun({
+      userId: session.user.id,
       filename: request.file.originalname,
       category,
       textColumn,
@@ -171,7 +197,7 @@ app.post("/api/runs", upload.single("file"), async (request, response, next) => 
     });
 
     console.log(
-      `[run:complete] id=${savedRun.id} validRows=${savedRun.validRowCount} removedRows=${savedRun.removedCount} modelMode=${savedRun.modelMode} modelName=${savedRun.modelName} aspectCoverage=${savedRun.summary.aspectCoverage}%`
+      `[run:complete] user=${session.user.id} id=${savedRun.id} validRows=${savedRun.validRowCount} removedRows=${savedRun.removedCount} modelMode=${savedRun.modelMode} modelName=${savedRun.modelName} aspectCoverage=${savedRun.summary.aspectCoverage}%`
     );
 
     response.status(201).json(savedRun);
@@ -182,7 +208,12 @@ app.post("/api/runs", upload.single("file"), async (request, response, next) => 
 
 app.get("/api/runs/:id", async (request, response, next) => {
   try {
-    const run = await getRunById(request.params.id);
+    const session = await requireSession(request, response);
+    if (!session) {
+      return;
+    }
+
+    const run = await getRunByIdForUser(request.params.id, session.user.id);
 
     if (!run) {
       response.status(404).json({ error: "Run not found." });
@@ -205,7 +236,12 @@ app.get("/api/runs/:id", async (request, response, next) => {
 
 app.get("/api/runs/:id/export", async (request, response, next) => {
   try {
-    const run = await getRunById(request.params.id);
+    const session = await requireSession(request, response);
+    if (!session) {
+      return;
+    }
+
+    const run = await getRunByIdForUser(request.params.id, session.user.id);
 
     if (!run) {
       response.status(404).json({ error: "Run not found." });
@@ -220,6 +256,22 @@ app.get("/api/runs/:id/export", async (request, response, next) => {
     response.status(200).send(csvContent);
   } catch (error) {
     next(error);
+  }
+});
+
+const clientDist = path.resolve("dist");
+app.use(express.static(clientDist));
+app.get("*", async (request, response, next) => {
+  if (request.path.startsWith("/api/")) {
+    next();
+    return;
+  }
+
+  try {
+    await fs.access(path.join(clientDist, "index.html"));
+    response.sendFile(path.join(clientDist, "index.html"));
+  } catch {
+    response.status(200).send("Sentiment Analysis API is running. Start the Vite client during development.");
   }
 });
 
