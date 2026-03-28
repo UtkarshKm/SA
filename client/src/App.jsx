@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Link,
   Navigate,
@@ -13,6 +13,10 @@ import {
 import { AspectChart, SentimentChart } from "./components/Charts.jsx";
 import { authClient } from "./lib/authClient.js";
 import { autoDetectTextColumn, previewCsv } from "./lib/csvPreview.js";
+
+const ACTIVE_STATUSES = new Set(["queued", "processing"]);
+const RUN_POLL_INTERVAL_MS = 2000;
+const HISTORY_POLL_INTERVAL_MS = 8000;
 
 async function apiFetch(path, options = {}) {
   const response = await fetch(path, {
@@ -30,6 +34,21 @@ async function apiFetch(path, options = {}) {
   }
 
   return data;
+}
+
+function formatStageLabel(stage) {
+  return String(stage || "queued")
+    .split(/\s+/)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function formatStatusLabel(status) {
+  return formatStageLabel(status);
+}
+
+function isRunActive(run) {
+  return ACTIVE_STATUSES.has(run?.status);
 }
 
 function PublicOnlyRoute({ children }) {
@@ -284,6 +303,58 @@ function DetailItem({ label, value }) {
   );
 }
 
+function StatusChip({ status }) {
+  return <span className={`status-chip status-${status}`}>{formatStatusLabel(status)}</span>;
+}
+
+function ProgressPanel({ run, onCancel, canceling }) {
+  const events = [...(run.progressEvents || [])].slice(-7).reverse();
+  const active = isRunActive(run);
+
+  return (
+    <section className="progress-shell scene-enter">
+      <div className="progress-head">
+        <div>
+          <div className="eyebrow">Run progress</div>
+          <h3>{run.progressMessage || "Waiting for the next step."}</h3>
+        </div>
+        <div className="progress-actions">
+          <StatusChip status={run.status} />
+          {active ? (
+            <button className="ghost-button danger-button" onClick={onCancel} disabled={canceling || run.cancelRequested} type="button">
+              {canceling || run.cancelRequested ? "Cancel requested..." : "Cancel run"}
+            </button>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="progress-meter">
+        <div className="progress-track" aria-hidden="true">
+          <div className="progress-fill" style={{ width: `${Math.max(0, Math.min(100, run.progressPercent || 0))}%` }} />
+        </div>
+        <div className="progress-caption">
+          <span>{formatStageLabel(run.progressStage)}</span>
+          <strong>{run.progressPercent || 0}%</strong>
+        </div>
+      </div>
+
+      <div className="timeline-list">
+        {events.length === 0 ? <p className="muted-copy">Stage updates will appear here as the run progresses.</p> : null}
+        {events.map((event, index) => (
+          <div className="timeline-item" key={`${event.stage}-${event.createdAt}-${index}`}>
+            <span className="timeline-dot" />
+            <div>
+              <strong>{formatStageLabel(event.stage)}</strong>
+              <p>{event.message}</p>
+            </div>
+            <time>{new Date(event.createdAt).toLocaleTimeString()}</time>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function UploadPage() {
   const [categories, setCategories] = useState([]);
   const [file, setFile] = useState(null);
@@ -360,7 +431,7 @@ function UploadPage() {
           <h2>Prepare a review dataset for sentiment and aspect analysis.</h2>
         </div>
         <p>
-          Upload one CSV, confirm the review column, choose a product category, and save the run under your
+          Upload one CSV, confirm the review column, choose a product category, and queue the run under your
           account.
         </p>
       </header>
@@ -405,7 +476,7 @@ function UploadPage() {
 
           <div className="action-row">
             <button type="submit" className="primary-button" disabled={submitting}>
-              {submitting ? "Running analysis..." : "Run analysis"}
+              {submitting ? "Queueing analysis..." : "Run analysis"}
             </button>
             {error ? <div className="error-copy">{error}</div> : null}
           </div>
@@ -464,12 +535,63 @@ function HistoryPage() {
   const [runs, setRuns] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const intervalRef = useRef(null);
 
   useEffect(() => {
-    apiFetch("/api/runs")
-      .then((data) => setRuns(data))
-      .catch((loadError) => setError(loadError.message))
-      .finally(() => setLoading(false));
+    let cancelled = false;
+
+    async function loadRuns() {
+      try {
+        const data = await apiFetch("/api/runs");
+        if (!cancelled) {
+          setRuns(data);
+          setError("");
+        }
+      } catch (loadError) {
+        if (!cancelled) {
+          setError(loadError.message);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    }
+
+    function stopPolling() {
+      if (intervalRef.current) {
+        window.clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    }
+
+    function startPolling() {
+      if (document.visibilityState !== "visible" || intervalRef.current) {
+        return;
+      }
+
+      intervalRef.current = window.setInterval(loadRuns, HISTORY_POLL_INTERVAL_MS);
+    }
+
+    function handleVisibilityChange() {
+      if (document.visibilityState === "visible") {
+        loadRuns();
+        startPolling();
+        return;
+      }
+
+      stopPolling();
+    }
+
+    loadRuns();
+    startPolling();
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      cancelled = true;
+      stopPolling();
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
   }, []);
 
   return (
@@ -477,7 +599,7 @@ function HistoryPage() {
       <header className="scene-header">
         <div>
           <div className="eyebrow">History</div>
-          <h2>Reopen previous datasets and compare results over time.</h2>
+          <h2>Reopen previous datasets and watch queued runs finish.</h2>
         </div>
       </header>
 
@@ -488,14 +610,17 @@ function HistoryPage() {
         {runs.map((run) => (
           <Link className="history-row" to={`/app/runs/${run.id}`} key={run.id}>
             <div>
-              <strong>{run.filename}</strong>
+              <div className="history-title-row">
+                <strong>{run.filename}</strong>
+                <StatusChip status={run.status} />
+              </div>
               <span>
                 {run.category} · {new Date(run.createdAt).toLocaleString()}
               </span>
             </div>
             <div className="history-stats">
-              <span>{run.validRowCount} valid rows</span>
-              <span>{run.summary?.aspectCoverage || 0}% aspect coverage</span>
+              <span>{run.progressPercent || 0}% complete</span>
+              <span>{run.progressMessage || `${run.validRowCount} valid rows`}</span>
             </div>
           </Link>
         ))}
@@ -511,24 +636,34 @@ function ResultsPage() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [canceling, setCanceling] = useState(false);
 
   const page = Number(searchParams.get("page") || 1);
   const sentiment = searchParams.get("sentiment") || "ALL";
   const search = searchParams.get("search") || "";
 
   useEffect(() => {
-    setLoading(true);
-    setError("");
-    const query = new URLSearchParams({
-      page: String(page),
-      pageSize: "20",
-      sentiment,
-      search
-    });
+    let cancelled = false;
 
-    apiFetch(`/api/runs/${runId}?${query.toString()}`)
-      .then((payload) => setData(payload))
-      .catch((loadError) => {
+    async function loadRun() {
+      try {
+        const query = new URLSearchParams({
+          page: String(page),
+          pageSize: "20",
+          sentiment,
+          search
+        });
+
+        const payload = await apiFetch(`/api/runs/${runId}?${query.toString()}`);
+        if (!cancelled) {
+          setData(payload);
+          setError("");
+        }
+      } catch (loadError) {
+        if (cancelled) {
+          return;
+        }
+
         if (loadError.status === 404) {
           setData(null);
           setError("Run not found.");
@@ -541,9 +676,55 @@ function ResultsPage() {
         }
 
         setError(loadError.message);
-      })
-      .finally(() => setLoading(false));
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    }
+
+    loadRun();
+    return () => {
+      cancelled = true;
+    };
   }, [page, runId, search, sentiment, navigate]);
+
+  useEffect(() => {
+    if (!data || !isRunActive(data)) {
+      return undefined;
+    }
+
+    const intervalId = window.setInterval(async () => {
+      try {
+        const query = new URLSearchParams({
+          page: String(page),
+          pageSize: "20",
+          sentiment,
+          search
+        });
+
+        const payload = await apiFetch(`/api/runs/${runId}?${query.toString()}`);
+        setData(payload);
+        setError("");
+      } catch (pollError) {
+        if (pollError.status !== 401) {
+          setError(pollError.message);
+        }
+      }
+    }, RUN_POLL_INTERVAL_MS);
+
+    return () => window.clearInterval(intervalId);
+  }, [data, page, runId, search, sentiment]);
+
+  useEffect(() => {
+    if (!data) {
+      return;
+    }
+
+    if (!data.cancelRequested) {
+      setCanceling(false);
+    }
+  }, [data]);
 
   const totalPages = useMemo(() => {
     if (!data?.table) {
@@ -552,6 +733,22 @@ function ResultsPage() {
 
     return Math.max(1, Math.ceil(data.table.total / data.table.pageSize));
   }, [data]);
+
+  async function handleCancel() {
+    if (!data) {
+      return;
+    }
+
+    setCanceling(true);
+    try {
+      const updated = await apiFetch(`/api/runs/${data.id}/cancel`, { method: "POST" });
+      setData((current) => ({ ...(current || {}), ...updated }));
+      setError("");
+    } catch (cancelError) {
+      setError(cancelError.message);
+      setCanceling(false);
+    }
+  }
 
   if (loading) {
     return (
@@ -569,6 +766,8 @@ function ResultsPage() {
     );
   }
 
+  const hasCompletedResults = Boolean(data.hasCompletedResults);
+
   return (
     <section className="scene">
       <header className="scene-header">
@@ -577,22 +776,23 @@ function ResultsPage() {
           <h2>{data.filename}</h2>
         </div>
         <div className="header-actions">
+          <StatusChip status={data.status} />
           <span>{data.category}</span>
-          <a className="primary-button ghost" href={`/api/runs/${data.id}/export`}>
-            Export CSV
-          </a>
+          {hasCompletedResults ? (
+            <a className="primary-button ghost" href={`/api/runs/${data.id}/export`}>
+              Export CSV
+            </a>
+          ) : (
+            <button className="primary-button ghost" disabled type="button">
+              Export after completion
+            </button>
+          )}
         </div>
       </header>
 
-      <section className="stats-row scene-enter">
-        <Stat label="Valid rows" value={data.validRowCount} />
-        <Stat label="Positive" value={data.summary.sentimentCounts.POSITIVE} tone="positive" />
-        <Stat label="Neutral" value={data.summary.sentimentCounts.NEUTRAL} tone="neutral" />
-        <Stat label="Negative" value={data.summary.sentimentCounts.NEGATIVE} tone="negative" />
-        <Stat label="Aspect coverage" value={`${data.summary.aspectCoverage}%`} />
-      </section>
+      <ProgressPanel run={data} onCancel={handleCancel} canceling={canceling} />
 
-      <section className="run-details scene-enter">
+      <section className="run-details scene-enter scene-enter-delay">
         <DetailItem label="Detected column" value={data.detectedTextColumn || "Not detected"} />
         <DetailItem label="Used column" value={data.textColumn} />
         <DetailItem label="Total rows in CSV" value={data.rowCount} />
@@ -602,104 +802,133 @@ function ResultsPage() {
         <DetailItem label="Model name" value={data.modelName} />
       </section>
 
-      <section className="results-grid scene-enter scene-enter-delay">
-        <SentimentChart counts={data.summary.sentimentCounts} />
-        <AspectChart aspects={data.summary.topAspects} />
-      </section>
+      {hasCompletedResults ? (
+        <>
+          <section className="stats-row scene-enter scene-enter-delay">
+            <Stat label="Valid rows" value={data.validRowCount} />
+            <Stat label="Positive" value={data.summary.sentimentCounts.POSITIVE} tone="positive" />
+            <Stat label="Neutral" value={data.summary.sentimentCounts.NEUTRAL} tone="neutral" />
+            <Stat label="Negative" value={data.summary.sentimentCounts.NEGATIVE} tone="negative" />
+            <Stat label="Aspect coverage" value={`${data.summary.aspectCoverage}%`} />
+          </section>
 
-      <section className="table-stage scene-enter scene-enter-delay-2">
-        <div className="table-toolbar">
-          <label className="search-field">
-            <span>Search rows</span>
-            <input
-              value={search}
-              onChange={(event) => {
-                const next = new URLSearchParams(searchParams);
-                next.set("search", event.target.value);
-                next.set("page", "1");
-                setSearchParams(next);
-              }}
-              placeholder="review text, aspect, or cleaned text"
-            />
-          </label>
+          <section className="results-grid scene-enter scene-enter-delay-2">
+            <SentimentChart counts={data.summary.sentimentCounts} />
+            <AspectChart aspects={data.summary.topAspects} />
+          </section>
 
-          <label className="search-field narrow">
-            <span>Sentiment</span>
-            <select
-              value={sentiment}
-              onChange={(event) => {
-                const next = new URLSearchParams(searchParams);
-                next.set("sentiment", event.target.value);
-                next.set("page", "1");
-                setSearchParams(next);
-              }}
-            >
-              <option value="ALL">All</option>
-              <option value="POSITIVE">Positive</option>
-              <option value="NEUTRAL">Neutral</option>
-              <option value="NEGATIVE">Negative</option>
-            </select>
-          </label>
-        </div>
+          <section className="table-stage scene-enter scene-enter-delay-2">
+            <div className="table-toolbar">
+              <label className="search-field">
+                <span>Search rows</span>
+                <input
+                  value={search}
+                  onChange={(event) => {
+                    const next = new URLSearchParams(searchParams);
+                    next.set("search", event.target.value);
+                    next.set("page", "1");
+                    setSearchParams(next);
+                  }}
+                  placeholder="review text, aspect, or cleaned text"
+                />
+              </label>
 
-        <div className="results-table-shell">
-          <table className="results-table">
-            <thead>
-              <tr>
-                <th>Original text</th>
-                <th>Sentiment</th>
-                <th>Confidence</th>
-                <th>Aspects</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.table.rows.map((row, index) => (
-                <tr key={`${row.original_text}-${index}`}>
-                  <td>
-                    <div className="row-original">{row.original_text}</div>
-                    <div className="row-clean">{row.clean_text}</div>
-                  </td>
-                  <td>
-                    <span className={`sentiment-tag ${row.predicted_label.toLowerCase()}`}>
-                      {row.predicted_label}
-                    </span>
-                  </td>
-                  <td>{row.confidence}</td>
-                  <td>{row.aspects.length > 0 ? row.aspects.join(", ") : "None"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              <label className="search-field narrow">
+                <span>Sentiment</span>
+                <select
+                  value={sentiment}
+                  onChange={(event) => {
+                    const next = new URLSearchParams(searchParams);
+                    next.set("sentiment", event.target.value);
+                    next.set("page", "1");
+                    setSearchParams(next);
+                  }}
+                >
+                  <option value="ALL">All</option>
+                  <option value="POSITIVE">Positive</option>
+                  <option value="NEUTRAL">Neutral</option>
+                  <option value="NEGATIVE">Negative</option>
+                </select>
+              </label>
+            </div>
 
-        <div className="pagination-row">
-          <button
-            className="pagination-button"
-            onClick={() => {
-              const next = new URLSearchParams(searchParams);
-              next.set("page", String(Math.max(1, page - 1)));
-              setSearchParams(next);
-            }}
-            disabled={page <= 1}
-          >
-            Previous
-          </button>
-          <span>
-            Page {page} of {totalPages}
-          </span>
-          <button
-            className="pagination-button"
-            onClick={() => {
-              const next = new URLSearchParams(searchParams);
-              next.set("page", String(Math.min(totalPages, page + 1)));
-              setSearchParams(next);
-            }}
-            disabled={page >= totalPages}
-          >
-            Next
-          </button>
-        </div>
-      </section>
+            <div className="results-table-shell">
+              <table className="results-table">
+                <thead>
+                  <tr>
+                    <th>Original text</th>
+                    <th>Sentiment</th>
+                    <th>Confidence</th>
+                    <th>Aspects</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.table.rows.map((row, index) => (
+                    <tr key={`${row.original_text}-${index}`}>
+                      <td>
+                        <div className="row-original">{row.original_text}</div>
+                        <div className="row-clean">{row.clean_text}</div>
+                      </td>
+                      <td>
+                        <span className={`sentiment-tag ${row.predicted_label.toLowerCase()}`}>
+                          {row.predicted_label}
+                        </span>
+                      </td>
+                      <td>{row.confidence}</td>
+                      <td>{row.aspects.length > 0 ? row.aspects.join(", ") : "None"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="pagination-row">
+              <button
+                className="pagination-button"
+                onClick={() => {
+                  const next = new URLSearchParams(searchParams);
+                  next.set("page", String(Math.max(1, page - 1)));
+                  setSearchParams(next);
+                }}
+                disabled={page <= 1}
+              >
+                Previous
+              </button>
+              <span>
+                Page {page} of {totalPages}
+              </span>
+              <button
+                className="pagination-button"
+                onClick={() => {
+                  const next = new URLSearchParams(searchParams);
+                  next.set("page", String(Math.min(totalPages, page + 1)));
+                  setSearchParams(next);
+                }}
+                disabled={page >= totalPages}
+              >
+                Next
+              </button>
+            </div>
+          </section>
+        </>
+      ) : (
+        <section className="empty-state scene-enter scene-enter-delay-2">
+          <h3>
+            {data.status === "canceled"
+              ? "This run was canceled before results were saved."
+              : data.status === "failed"
+                ? "This run failed before results were saved."
+                : "Results will appear here when processing finishes."}
+          </h3>
+          <p>
+            {data.status === "failed"
+              ? data.errorMessage || "Check the server logs for the exact failure and try again with another CSV."
+              : data.status === "canceled"
+                ? "Start a new run from the upload workspace when you are ready to analyze again."
+                : "Keep this page open to watch the progress bar and timeline update live."}
+          </p>
+        </section>
+      )}
     </section>
   );
 }

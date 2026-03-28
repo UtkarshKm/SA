@@ -354,3 +354,86 @@ node server\index.js
 - No background job queue
 - Existing local runs are not auto-imported
 - Frontend build/test execution may depend on your local shell environment
+
+## Async Progress And Cancellation
+
+Run creation is now asynchronous.
+
+What happens when you click `Run analysis`:
+
+1. the server validates the upload and creates a Mongo run document in `queued` state
+2. the browser moves to the run page immediately
+3. the server processes the run in the background
+4. the run page polls Mongo-backed status updates and renders them live
+
+Run lifecycle states:
+
+- `queued`
+- `processing`
+- `completed`
+- `failed`
+- `canceled`
+
+Additional run fields now stored in MongoDB:
+
+- `progressPercent`
+- `progressStage`
+- `progressMessage`
+- `errorMessage`
+- `cancelRequested`
+- `processingStartedAt`
+- `processingCompletedAt`
+- `lastProcessedAt`
+- `progressEvents`
+
+The UI now shows:
+
+- a live progress bar
+- the current stage label
+- a timeline of stage updates
+- a cancel button while the run is active
+- status chips in history and on the run page
+
+The backend logs now include stage-level progress such as:
+
+```text
+[run:queued] user=... id=... totalRows=1230
+[run:processing] user=... id=... stage="processing started"
+[run:parsing] user=... id=... totalRows=1230
+[run:validate] user=... id=... validRows=1230 removedRows=0
+[run:inference] user=... id=... processed=320/1230 modelMode=transformers
+[run:aspects] user=... id=... processed=800/1230
+[run:save] user=... id=... validRows=1230 removedRows=0
+[run:complete] user=... id=... validRows=1230 removedRows=0 modelMode=transformers modelName=Xenova/distilbert-base-uncased-finetuned-sst-2-english aspectCoverage=61.7%
+```
+
+Cancel behavior:
+
+- users can cancel only `queued` or `processing` runs
+- cancellation is cooperative, so the server stops at safe batch/stage boundaries
+- a canceled run stays in MongoDB with `status=canceled`
+- export is available only for completed runs
+
+## Updated Testing Checklist
+
+### Progress and cancellation
+
+1. Run `npm run dev`
+2. Open [http://localhost:5173](http://localhost:5173)
+3. Sign in
+4. Upload a CSV with enough rows to make progress visible
+5. Confirm the run page opens immediately after submit
+6. Confirm the progress bar and timeline update while the run is active
+7. Confirm the terminal logs show matching stages
+8. Click `Cancel run` during `queued` or `processing`
+9. Confirm the run ends in `canceled`
+10. Confirm export is disabled for the canceled run
+11. Start another run and let it complete
+12. Confirm export becomes available only after completion
+
+### History live states
+
+1. Open `History`
+2. Confirm queued or processing runs show status chips and progress text
+3. Wait for a run to finish
+4. Confirm the status changes to `completed` without needing a manual browser refresh

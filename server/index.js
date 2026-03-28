@@ -3,14 +3,21 @@ import path from "node:path";
 import express from "express";
 import cors from "cors";
 import multer from "multer";
-import { CATEGORY_ASPECTS, extractAspects, resolveCategory } from "./lib/aspects.js";
+import { CATEGORY_ASPECTS, resolveCategory } from "./lib/aspects.js";
 import { authHandler } from "./lib/auth.js";
 import { requireSession } from "./lib/authSession.js";
 import { parseCsvBuffer, stringifyRows } from "./lib/csv.js";
 import { connectDatabase } from "./lib/db.js";
-import { createRun, getRunByIdForUser, listRunsByUser } from "./lib/runRepository.js";
+import {
+  createQueuedRun,
+  getRunByIdForUser,
+  getRunMetadataByIdForUser,
+  listRunsByUser,
+  requestRunCancel
+} from "./lib/runRepository.js";
+import { enqueueRunProcessing } from "./lib/runProcessor.js";
 import { SentimentAnalyzer } from "./lib/sentiment.js";
-import { detectTextColumn, filterValidRows, normalizeText } from "./lib/text.js";
+import { detectTextColumn } from "./lib/text.js";
 
 const app = express();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -26,35 +33,6 @@ app.use((request, _response, next) => {
 app.all("/api/auth/*", authHandler);
 app.use(express.json({ limit: "2mb" }));
 
-function summarizeRows(rows) {
-  const sentimentCounts = { POSITIVE: 0, NEUTRAL: 0, NEGATIVE: 0 };
-  const aspectCounts = new Map();
-  let rowsWithAspects = 0;
-
-  for (const row of rows) {
-    sentimentCounts[row.predicted_label] = (sentimentCounts[row.predicted_label] || 0) + 1;
-
-    if (row.aspect_count > 0) {
-      rowsWithAspects += 1;
-    }
-
-    for (const aspect of row.aspects) {
-      aspectCounts.set(aspect, (aspectCounts.get(aspect) || 0) + 1);
-    }
-  }
-
-  const topAspects = [...aspectCounts.entries()]
-    .sort((left, right) => right[1] - left[1])
-    .slice(0, 8)
-    .map(([name, count]) => ({ name, count }));
-
-  return {
-    sentimentCounts,
-    topAspects,
-    aspectCoverage: rows.length === 0 ? 0 : Number(((rowsWithAspects / rows.length) * 100).toFixed(1))
-  };
-}
-
 function paginateRows(rows, { page = 1, pageSize = 20, search = "", sentiment = "ALL" }) {
   const normalizedSearch = search.trim().toLowerCase();
   const filtered = rows.filter((row) => {
@@ -64,7 +42,7 @@ function paginateRows(rows, { page = 1, pageSize = 20, search = "", sentiment = 
         ? true
         : row.clean_text.includes(normalizedSearch) ||
           row.original_text.toLowerCase().includes(normalizedSearch) ||
-          row.aspects.join(" ").includes(normalizedSearch);
+          row.aspects.join(" ").toLowerCase().includes(normalizedSearch);
 
     return matchesSentiment && matchesSearch;
   });
@@ -79,24 +57,6 @@ function paginateRows(rows, { page = 1, pageSize = 20, search = "", sentiment = 
   };
 }
 
-function buildStoredRows(rawRows, textColumn, normalizedTexts, sentiments, category) {
-  return rawRows.map((row, index) => {
-    const cleanText = normalizedTexts[index];
-    const aspects = extractAspects(cleanText, category);
-    const sentiment = sentiments[index];
-
-    return {
-      sourceRow: row,
-      original_text: String(row[textColumn] ?? ""),
-      clean_text: cleanText,
-      predicted_label: sentiment.label,
-      confidence: sentiment.confidence,
-      aspects,
-      aspect_count: aspects.length
-    };
-  });
-}
-
 function buildExportRows(rows) {
   return rows.map((row) => ({
     ...row.sourceRow,
@@ -107,6 +67,24 @@ function buildExportRows(rows) {
     aspects: row.aspects.join(", "),
     aspect_count: row.aspect_count
   }));
+}
+
+function buildProgressOnlyResponse(run) {
+  return {
+    ...run,
+    hasCompletedResults: false,
+    table: null
+  };
+}
+
+function buildRunResponse(run, pageParams) {
+  const hasCompletedResults = run.status === "completed" && Array.isArray(run.rows) && run.rows.length > 0;
+
+  return {
+    ...run,
+    hasCompletedResults,
+    table: hasCompletedResults ? paginateRows(run.rows, pageParams) : null
+  };
 }
 
 app.get("/api/config", async (request, response, next) => {
@@ -158,49 +136,63 @@ app.post("/api/runs", upload.single("file"), async (request, response, next) => 
     const detectedTextColumn = detectTextColumn(records, columns);
     const textColumn = request.body.textColumn || detectedTextColumn;
 
-    console.log(
-      `[run:start] user=${session.user.id} file="${request.file.originalname}" category=${category} detectedColumn="${detectedTextColumn}" selectedColumn="${textColumn}" totalRows=${records.length}`
-    );
-
     if (!textColumn || !columns.includes(textColumn)) {
       response.status(400).json({ error: "A valid text column is required.", columns, detectedTextColumn });
       return;
     }
 
-    const { keptRows, removedCount } = filterValidRows(records, textColumn);
-
-    if (keptRows.length === 0) {
-      response.status(400).json({ error: "No non-empty rows were found in the selected text column." });
-      return;
-    }
-
-    const normalizedTexts = keptRows.map((row) => normalizeText(row[textColumn]));
-    const sentiments = await analyzer.analyze(normalizedTexts);
-    const storedRows = buildStoredRows(keptRows, textColumn, normalizedTexts, sentiments, category);
-    const summary = summarizeRows(storedRows);
-
-    const savedRun = await createRun({
+    const savedRun = await createQueuedRun({
       userId: session.user.id,
       filename: request.file.originalname,
       category,
       textColumn,
       detectedTextColumn,
       columns,
-      status: "completed",
-      rowCount: records.length,
-      validRowCount: storedRows.length,
-      removedCount,
-      modelMode: analyzer.mode,
-      modelName: analyzer.modelName,
-      summary,
-      rows: storedRows
+      rowCount: records.length
     });
 
     console.log(
-      `[run:complete] user=${session.user.id} id=${savedRun.id} validRows=${savedRun.validRowCount} removedRows=${savedRun.removedCount} modelMode=${savedRun.modelMode} modelName=${savedRun.modelName} aspectCoverage=${savedRun.summary.aspectCoverage}%`
+      `[run:queued] user=${session.user.id} id=${savedRun.id} file="${request.file.originalname}" category=${category} detectedColumn="${detectedTextColumn}" selectedColumn="${textColumn}" totalRows=${records.length}`
     );
 
-    response.status(201).json(savedRun);
+    enqueueRunProcessing({
+      runId: savedRun.id,
+      userId: session.user.id,
+      category,
+      textColumn,
+      records,
+      analyzer
+    });
+
+    response.status(202).json(savedRun);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/runs/:id/cancel", async (request, response, next) => {
+  try {
+    const session = await requireSession(request, response);
+    if (!session) {
+      return;
+    }
+
+    const run = await requestRunCancel(request.params.id, session.user.id);
+
+    if (!run) {
+      const existingRun = await getRunMetadataByIdForUser(request.params.id, session.user.id);
+
+      if (!existingRun) {
+        response.status(404).json({ error: "Run not found." });
+        return;
+      }
+
+      response.status(409).json({ error: `Run cannot be canceled while in ${existingRun.status} state.` });
+      return;
+    }
+
+    console.log(`[run:cancel-request] user=${session.user.id} id=${run.id} status=${run.status}`);
+    response.json(run);
   } catch (error) {
     next(error);
   }
@@ -210,6 +202,23 @@ app.get("/api/runs/:id", async (request, response, next) => {
   try {
     const session = await requireSession(request, response);
     if (!session) {
+      return;
+    }
+
+    const runMeta = await getRunMetadataByIdForUser(request.params.id, session.user.id);
+
+    if (!runMeta) {
+      response.status(404).json({ error: "Run not found." });
+      return;
+    }
+
+    if (runMeta.status === "queued" || runMeta.status === "processing") {
+      response.json(buildProgressOnlyResponse(runMeta));
+      return;
+    }
+
+    if (runMeta.status === "failed" || runMeta.status === "canceled") {
+      response.json(buildProgressOnlyResponse(runMeta));
       return;
     }
 
@@ -225,10 +234,7 @@ app.get("/api/runs/:id", async (request, response, next) => {
     const search = String(request.query.search || "");
     const sentiment = String(request.query.sentiment || "ALL").toUpperCase();
 
-    response.json({
-      ...run,
-      table: paginateRows(run.rows, { page, pageSize, search, sentiment })
-    });
+    response.json(buildRunResponse(run, { page, pageSize, search, sentiment }));
   } catch (error) {
     next(error);
   }
@@ -245,6 +251,11 @@ app.get("/api/runs/:id/export", async (request, response, next) => {
 
     if (!run) {
       response.status(404).json({ error: "Run not found." });
+      return;
+    }
+
+    if (run.status !== "completed" || run.rows.length === 0) {
+      response.status(409).json({ error: "Export is available only after a run completes." });
       return;
     }
 
