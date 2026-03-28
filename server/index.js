@@ -1,22 +1,12 @@
-import crypto from "node:crypto";
-import fs from "node:fs/promises";
-import path from "node:path";
 import express from "express";
 import cors from "cors";
 import multer from "multer";
 import { CATEGORY_ASPECTS, extractAspects, resolveCategory } from "./lib/aspects.js";
 import { parseCsvBuffer, stringifyRows } from "./lib/csv.js";
+import { connectDatabase } from "./lib/db.js";
+import { createRun, getRunById, listRuns } from "./lib/runRepository.js";
 import { SentimentAnalyzer } from "./lib/sentiment.js";
 import { detectTextColumn, filterValidRows, normalizeText } from "./lib/text.js";
-import {
-  ensureStorage,
-  getExportPath,
-  readIndex,
-  readRunMetadata,
-  readRunRows,
-  saveRunArtifacts,
-  writeIndex
-} from "./lib/storage.js";
 
 const app = express();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -83,13 +73,43 @@ function paginateRows(rows, { page = 1, pageSize = 20, search = "", sentiment = 
   };
 }
 
+function buildStoredRows(rawRows, textColumn, normalizedTexts, sentiments, category) {
+  return rawRows.map((row, index) => {
+    const cleanText = normalizedTexts[index];
+    const aspects = extractAspects(cleanText, category);
+    const sentiment = sentiments[index];
+
+    return {
+      sourceRow: row,
+      original_text: String(row[textColumn] ?? ""),
+      clean_text: cleanText,
+      predicted_label: sentiment.label,
+      confidence: sentiment.confidence,
+      aspects,
+      aspect_count: aspects.length
+    };
+  });
+}
+
+function buildExportRows(rows) {
+  return rows.map((row) => ({
+    ...row.sourceRow,
+    original_text: row.original_text,
+    clean_text: row.clean_text,
+    predicted_label: row.predicted_label,
+    confidence: row.confidence,
+    aspects: row.aspects.join(", "),
+    aspect_count: row.aspect_count
+  }));
+}
+
 app.get("/api/config", (_request, response) => {
   response.json({ categories: Object.keys(CATEGORY_ASPECTS) });
 });
 
 app.get("/api/runs", async (_request, response, next) => {
   try {
-    response.json(await readIndex());
+    response.json(await listRuns());
   } catch (error) {
     next(error);
   }
@@ -131,69 +151,30 @@ app.post("/api/runs", upload.single("file"), async (request, response, next) => 
 
     const normalizedTexts = keptRows.map((row) => normalizeText(row[textColumn]));
     const sentiments = await analyzer.analyze(normalizedTexts);
+    const storedRows = buildStoredRows(keptRows, textColumn, normalizedTexts, sentiments, category);
+    const summary = summarizeRows(storedRows);
 
-    const enrichedRows = keptRows.map((row, index) => {
-      const cleanText = normalizedTexts[index];
-      const aspects = extractAspects(cleanText, category);
-      const sentiment = sentiments[index];
-
-      return {
-        ...row,
-        original_text: String(row[textColumn] ?? ""),
-        clean_text: cleanText,
-        predicted_label: sentiment.label,
-        confidence: sentiment.confidence,
-        aspects,
-        aspect_count: aspects.length
-      };
-    });
-
-    const summary = summarizeRows(enrichedRows);
-    const metadata = {
-      id: crypto.randomUUID(),
+    const savedRun = await createRun({
       filename: request.file.originalname,
       category,
       textColumn,
       detectedTextColumn,
       columns,
-      createdAt: new Date().toISOString(),
       status: "completed",
       rowCount: records.length,
-      validRowCount: enrichedRows.length,
+      validRowCount: storedRows.length,
       removedCount,
       modelMode: analyzer.mode,
-      summary
-    };
+      modelName: analyzer.modelName,
+      summary,
+      rows: storedRows
+    });
 
     console.log(
-      `[run:complete] id=${metadata.id} validRows=${metadata.validRowCount} removedRows=${metadata.removedCount} modelMode=${metadata.modelMode} aspectCoverage=${metadata.summary.aspectCoverage}%`
+      `[run:complete] id=${savedRun.id} validRows=${savedRun.validRowCount} removedRows=${savedRun.removedCount} modelMode=${savedRun.modelMode} modelName=${savedRun.modelName} aspectCoverage=${savedRun.summary.aspectCoverage}%`
     );
 
-    await saveRunArtifacts({
-      runId: metadata.id,
-      originalBuffer: request.file.buffer,
-      originalFileName: request.file.originalname,
-      rows: enrichedRows,
-      metadata,
-      csvContent: stringifyRows(enrichedRows)
-    });
-
-    const index = await readIndex();
-    index.unshift({
-      id: metadata.id,
-      filename: metadata.filename,
-      category: metadata.category,
-      textColumn: metadata.textColumn,
-      createdAt: metadata.createdAt,
-      status: metadata.status,
-      rowCount: metadata.rowCount,
-      validRowCount: metadata.validRowCount,
-      modelMode: metadata.modelMode,
-      summary: metadata.summary
-    });
-    await writeIndex(index);
-
-    response.status(201).json(metadata);
+    response.status(201).json(savedRun);
   } catch (error) {
     next(error);
   }
@@ -201,16 +182,21 @@ app.post("/api/runs", upload.single("file"), async (request, response, next) => 
 
 app.get("/api/runs/:id", async (request, response, next) => {
   try {
-    const metadata = await readRunMetadata(request.params.id);
-    const rows = await readRunRows(request.params.id);
+    const run = await getRunById(request.params.id);
+
+    if (!run) {
+      response.status(404).json({ error: "Run not found." });
+      return;
+    }
+
     const page = Number(request.query.page || 1);
     const pageSize = Number(request.query.pageSize || 20);
     const search = String(request.query.search || "");
     const sentiment = String(request.query.sentiment || "ALL").toUpperCase();
 
     response.json({
-      ...metadata,
-      table: paginateRows(rows, { page, pageSize, search, sentiment })
+      ...run,
+      table: paginateRows(run.rows, { page, pageSize, search, sentiment })
     });
   } catch (error) {
     next(error);
@@ -219,28 +205,21 @@ app.get("/api/runs/:id", async (request, response, next) => {
 
 app.get("/api/runs/:id/export", async (request, response, next) => {
   try {
-    const metadata = await readRunMetadata(request.params.id);
-    const exportPath = getExportPath(request.params.id);
-    await fs.access(exportPath);
-    response.download(exportPath, `${metadata.id}-${metadata.filename.replace(/\.csv$/i, "")}-analyzed.csv`);
+    const run = await getRunById(request.params.id);
+
+    if (!run) {
+      response.status(404).json({ error: "Run not found." });
+      return;
+    }
+
+    const csvContent = stringifyRows(buildExportRows(run.rows));
+    const baseName = run.filename.replace(/\.csv$/i, "");
+
+    response.setHeader("Content-Type", "text/csv; charset=utf-8");
+    response.setHeader("Content-Disposition", `attachment; filename="${run.id}-${baseName}-analyzed.csv"`);
+    response.status(200).send(csvContent);
   } catch (error) {
     next(error);
-  }
-});
-
-const clientDist = path.resolve("dist");
-app.use(express.static(clientDist));
-app.get("*", async (request, response, next) => {
-  if (request.path.startsWith("/api/")) {
-    next();
-    return;
-  }
-
-  try {
-    await fs.access(path.join(clientDist, "index.html"));
-    response.sendFile(path.join(clientDist, "index.html"));
-  } catch {
-    response.status(200).send("Sentiment Analysis API is running. Start the Vite client during development.");
   }
 });
 
@@ -249,7 +228,7 @@ app.use((error, _request, response, _next) => {
   response.status(500).json({ error: error?.message || "Unexpected server error." });
 });
 
-await ensureStorage();
+await connectDatabase();
 
 app.listen(PORT, () => {
   console.log(`Sentiment app server listening on http://localhost:${PORT}`);

@@ -1,12 +1,12 @@
 # Sentiment Analysis MVP
 
-A local-first full-stack web app built from the original notebook workflow in [Sentimenatal_anaylsis.py](C:/Users/Public/Documents/LANGUAGE/final-project-S_A-28-March/Sentimenatal_anaylsis.py).
+A MongoDB-backed full-stack web app built from the original notebook workflow in [Sentimenatal_anaylsis.py](C:/Users/Public/Documents/LANGUAGE/final-project-S_A-28-March/Sentimenatal_anaylsis.py).
 
 ## Stack
 
 - React + Vite frontend
 - Express backend
-- Local filesystem storage for uploaded files and run history
+- MongoDB + Mongoose for run storage
 - Node-based sentiment pipeline with a fallback analyzer
 
 ## Features
@@ -26,13 +26,14 @@ A local-first full-stack web app built from the original notebook workflow in [S
   - rows analyzed
   - rows removed
   - model mode
+  - model name
 
 ## Project Structure
 
 ```text
 client/        React frontend
-server/        Express API and analysis logic
-data/          Local run storage
+server/        Express API, MongoDB connection, and analysis logic
+data/          Old local run artifacts from the pre-Mongo version
 tests/         Utility tests
 ```
 
@@ -43,6 +44,19 @@ From the project root:
 ```powershell
 npm install
 ```
+
+## Environment Setup
+
+Create a `.env` file in the project root and add:
+
+```text
+MONGODB_URI=your-mongodb-connection-string
+PORT=3001
+```
+
+Use [.env.example](C:/Users/Public/Documents/LANGUAGE/final-project-S_A-28-March/.env.example) as the template.
+
+`mongodb.txt` can remain as a temporary reference, but the app now reads the connection string from `MONGODB_URI`.
 
 ## Run In Development
 
@@ -102,35 +116,31 @@ These logs help confirm:
 - how many rows were processed
 - how many rows were dropped as empty
 - whether the model ran in `transformers` or `fallback` mode
+- which exact model name was used
 
 You can also verify from the results page, which shows the same run details.
 
-## Local Storage
+## MongoDB Storage
 
-Each run is stored locally under:
+New runs are stored in MongoDB using Mongoose.
 
-```text
-data/runs/<runId>/
-```
+Each run document stores:
 
-Artifacts include:
+- run metadata
+- summary stats
+- analyzed rows
+- model mode
+- model name
 
-- original uploaded CSV
-- `metadata.json`
-- `rows.json`
-- `output.csv`
+The app no longer uses local filesystem storage for new runs.
 
-The run history index is stored in:
-
-```text
-data/index.json
-```
+Existing files under `data/` are left untouched and are not auto-imported.
 
 ## Notes
 
 - If the Hugging Face runtime is unavailable, the app falls back to a lightweight rule-based sentiment analyzer.
 - Advanced notebook features like WordNet synonym expansion and word clouds are not included yet.
-- Database integration is intentionally deferred for this MVP.
+- Existing local history is not auto-migrated into MongoDB.
 
 ## Useful Commands
 
@@ -154,8 +164,8 @@ node server\index.js
 
 ## Current Limitations
 
-- Local storage only
+- MongoDB connection is required
 - No authentication
 - No background job queue
-- No database yet
+- Existing local runs are not auto-imported
 - Frontend build/test execution may depend on your local shell environment

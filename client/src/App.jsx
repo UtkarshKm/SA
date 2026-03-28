@@ -343,6 +343,7 @@ function ResultsPage() {
         <DetailItem label="Rows analyzed" value={data.validRowCount} />
         <DetailItem label="Rows removed" value={data.removedCount} />
         <DetailItem label="Model mode" value={data.modelMode} />
+        <DetailItem label="Model name" value={data.modelName} />
       </section>
 
       <section className="results-grid scene-enter scene-enter-delay">
