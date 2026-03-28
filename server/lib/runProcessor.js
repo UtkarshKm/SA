@@ -64,18 +64,18 @@ function buildStoredRow(row, textColumn, cleanText, sentiment, category) {
 
 function buildInferencePercent(processed, total) {
   if (total === 0) {
-    return 70;
+    return 10;
   }
 
-  return Math.min(74, 32 + Math.round((processed / total) * 42));
+  return Math.min(85, 10 + Math.round((processed / total) * 75));
 }
 
 function buildAspectPercent(processed, total) {
   if (total === 0) {
-    return 92;
+    return 95;
   }
 
-  return Math.min(94, 76 + Math.round((processed / total) * 18));
+  return Math.min(95, 85 + Math.round((processed / total) * 10));
 }
 
 async function ensureNotCanceled(runId, userId, fallbackMessage) {
@@ -114,7 +114,7 @@ async function processRun(job) {
     await setStage(runId, userId, {
       stage: "processing started",
       message: "Preparing the analysis job.",
-      percent: 4,
+      percent: 2,
       extra: {
         processingStartedAt: new Date(),
         processingCompletedAt: null,
@@ -129,7 +129,7 @@ async function processRun(job) {
     await setStage(runId, userId, {
       stage: "parsing csv",
       message: `Parsed ${records.length} CSV rows into memory.`,
-      percent: 12
+      percent: 5
     });
     console.log(`[run:parsing] user=${userId} id=${runId} totalRows=${records.length}`);
 
@@ -143,7 +143,7 @@ async function processRun(job) {
     await setStage(runId, userId, {
       stage: "validating rows",
       message: `Validated ${keptRows.length} rows. Removed ${removedCount} empty rows.`,
-      percent: 22,
+      percent: 8,
       extra: {
         validRowCount: keptRows.length,
         removedCount
@@ -159,7 +159,7 @@ async function processRun(job) {
     await setStage(runId, userId, {
       stage: "running sentiment inference",
       message: `Loading ${analyzer.modelName} on ${analyzer.mode === "pending" ? "available" : analyzer.mode}.`,
-      percent: 32,
+      percent: 10,
       extra: {
         modelMode: analyzer.mode,
         modelName: analyzer.modelName
@@ -190,7 +190,7 @@ async function processRun(job) {
     await setStage(runId, userId, {
       stage: "extracting aspects",
       message: "Extracting category-aligned aspects from normalized reviews.",
-      percent: 76,
+      percent: 85,
       extra: {
         modelMode: analyzer.mode,
         modelName: analyzer.modelName
@@ -229,7 +229,7 @@ async function processRun(job) {
     await setStage(runId, userId, {
       stage: "saving results",
       message: "Saving analyzed rows and summary to MongoDB.",
-      percent: 97
+      percent: 95
     });
     console.log(`[run:save] user=${userId} id=${runId} validRows=${storedRows.length} removedRows=${removedCount}`);
 

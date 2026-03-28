@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Link,
   Navigate,
@@ -15,6 +15,8 @@ import { authClient } from "./lib/authClient.js";
 import { autoDetectTextColumn, previewCsv } from "./lib/csvPreview.js";
 
 const ACTIVE_STATUSES = new Set(["queued", "processing"]);
+const RUN_POLL_INTERVAL_MS = 2000;
+const HISTORY_POLL_INTERVAL_MS = 8000;
 
 async function apiFetch(path, options = {}) {
   const response = await fetch(path, {
@@ -533,6 +535,7 @@ function HistoryPage() {
   const [runs, setRuns] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const intervalRef = useRef(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -555,12 +558,39 @@ function HistoryPage() {
       }
     }
 
+    function stopPolling() {
+      if (intervalRef.current) {
+        window.clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    }
+
+    function startPolling() {
+      if (document.visibilityState !== "visible" || intervalRef.current) {
+        return;
+      }
+
+      intervalRef.current = window.setInterval(loadRuns, HISTORY_POLL_INTERVAL_MS);
+    }
+
+    function handleVisibilityChange() {
+      if (document.visibilityState === "visible") {
+        loadRuns();
+        startPolling();
+        return;
+      }
+
+      stopPolling();
+    }
+
     loadRuns();
-    const intervalId = window.setInterval(loadRuns, 4000);
+    startPolling();
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
       cancelled = true;
-      window.clearInterval(intervalId);
+      stopPolling();
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, []);
 
@@ -681,7 +711,7 @@ function ResultsPage() {
           setError(pollError.message);
         }
       }
-    }, 1600);
+    }, RUN_POLL_INTERVAL_MS);
 
     return () => window.clearInterval(intervalId);
   }, [data, page, runId, search, sentiment]);

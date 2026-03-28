@@ -11,6 +11,7 @@ import { connectDatabase } from "./lib/db.js";
 import {
   createQueuedRun,
   getRunByIdForUser,
+  getRunMetadataByIdForUser,
   listRunsByUser,
   requestRunCancel
 } from "./lib/runRepository.js";
@@ -66,6 +67,14 @@ function buildExportRows(rows) {
     aspects: row.aspects.join(", "),
     aspect_count: row.aspect_count
   }));
+}
+
+function buildProgressOnlyResponse(run) {
+  return {
+    ...run,
+    hasCompletedResults: false,
+    table: null
+  };
 }
 
 function buildRunResponse(run, pageParams) {
@@ -171,7 +180,7 @@ app.post("/api/runs/:id/cancel", async (request, response, next) => {
     const run = await requestRunCancel(request.params.id, session.user.id);
 
     if (!run) {
-      const existingRun = await getRunByIdForUser(request.params.id, session.user.id);
+      const existingRun = await getRunMetadataByIdForUser(request.params.id, session.user.id);
 
       if (!existingRun) {
         response.status(404).json({ error: "Run not found." });
@@ -193,6 +202,23 @@ app.get("/api/runs/:id", async (request, response, next) => {
   try {
     const session = await requireSession(request, response);
     if (!session) {
+      return;
+    }
+
+    const runMeta = await getRunMetadataByIdForUser(request.params.id, session.user.id);
+
+    if (!runMeta) {
+      response.status(404).json({ error: "Run not found." });
+      return;
+    }
+
+    if (runMeta.status === "queued" || runMeta.status === "processing") {
+      response.json(buildProgressOnlyResponse(runMeta));
+      return;
+    }
+
+    if (runMeta.status === "failed" || runMeta.status === "canceled") {
+      response.json(buildProgressOnlyResponse(runMeta));
       return;
     }
 

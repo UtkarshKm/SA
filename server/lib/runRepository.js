@@ -80,6 +80,23 @@ export async function getRunByIdForUser(id, userId) {
   return mapRun(run);
 }
 
+export async function getRunMetadataByIdForUser(id, userId) {
+  if (!isValidRunId(id)) {
+    return null;
+  }
+
+  const run = await RunModel.findOne(
+    { _id: id, userId },
+    {
+      rows: 0,
+      summary: 0,
+      __v: 0
+    }
+  ).lean();
+
+  return mapRun(run);
+}
+
 export async function getRunJobState(id, userId) {
   if (!isValidRunId(id)) {
     return null;
