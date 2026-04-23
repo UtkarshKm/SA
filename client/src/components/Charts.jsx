@@ -14,7 +14,19 @@ import {
 
 function readPalette() {
   if (typeof window === "undefined") {
-    return {};
+    return {
+      POSITIVE: "#6dd3a8",
+      NEUTRAL: "#b8c5d6",
+      NEGATIVE: "#f07c64",
+      accent: "#9cc6ff",
+      accentSoft: "rgba(156, 198, 255, 0.16)",
+      grid: "rgba(255,255,255,0.08)",
+      text: "#97a6b7",
+      tooltipBg: "#111922",
+      tooltipBorder: "rgba(255,255,255,0.1)",
+      tooltipText: "#f5f7fa",
+      barRadius: 10
+    };
   }
   const styles = getComputedStyle(document.documentElement);
   const read = (name, fallback) => {
@@ -178,7 +190,7 @@ export function AspectSentimentChart({ data }) {
 export function AspectCoverageChart({ data }) {
   const palette = useChartPalette();
   const chartData = data && data.length > 0 ? data : [{ name: "No data", value: 1 }];
-  const coverageColors = [palette.accent, palette.grid];
+  const coverageColors = [palette.accent, palette.accentSoft];
 
   return (
     <div className="chart-shell chart-shell-compact">

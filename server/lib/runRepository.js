@@ -287,3 +287,51 @@ export async function requestRunCancel(id, userId) {
 
   return mapRun(run);
 }
+
+export async function markActiveRunsInterrupted() {
+  const activeRuns = await RunModel.find(
+    {
+      status: { $in: ["queued", "processing"] }
+    },
+    {
+      _id: 1,
+      progressPercent: 1
+    }
+  ).lean();
+
+  if (activeRuns.length === 0) {
+    return 0;
+  }
+
+  const completedAt = new Date();
+  const interruptionMessage =
+    "Run interrupted by a server restart before processing could finish. Please retry the upload.";
+
+  const operations = activeRuns.map((run) => ({
+    updateOne: {
+      filter: { _id: run._id, status: { $in: ["queued", "processing"] } },
+      update: {
+        $set: {
+          status: "failed",
+          progressStage: "failed",
+          progressMessage: "Run interrupted by a server restart.",
+          errorMessage: interruptionMessage,
+          cancelRequested: false,
+          processingCompletedAt: completedAt,
+          lastProcessedAt: completedAt,
+          progressPercent: Math.max(run.progressPercent || 0, 0)
+        },
+        $push: {
+          progressEvents: buildProgressEvent(
+            "failed",
+            interruptionMessage,
+            Math.max(run.progressPercent || 0, 0)
+          )
+        }
+      }
+    }
+  }));
+
+  const result = await RunModel.bulkWrite(operations, { ordered: false });
+  return result.modifiedCount || 0;
+}

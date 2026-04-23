@@ -79,6 +79,14 @@ body {
 
 a {
   color: inherit;
+}
+
+.back-link,
+.ghost-link,
+.primary-button,
+.pagination-button,
+.nav-links a,
+.history-row {
   text-decoration: none;
 }
 
@@ -406,6 +414,7 @@ svg {
 }
 
 .metric-item span {
+  display: block;
   font-family: var(--font-label, var(--font-body));
   text-transform: uppercase;
   letter-spacing: var(--label-tracking, 0.14em);
@@ -791,7 +800,12 @@ svg {
 }
 
 .file-drop input {
-  display: none;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
 }
 
 .controls-row {
@@ -998,6 +1012,7 @@ svg {
 }
 
 .stat-block span {
+  display: block;
   font-family: var(--font-label, var(--font-body));
   text-transform: uppercase;
   letter-spacing: var(--label-tracking, 0.14em);
