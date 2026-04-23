@@ -127,6 +127,49 @@ const STOPWORDS = new Set([
   "your"
 ]);
 
+const DOMAIN_STOPWORDS = new Set([
+  "amazon",
+  "best",
+  "bought",
+  "buy",
+  "buying",
+  "cast",
+  "customer",
+  "customers",
+  "delivery",
+  "don",
+  "expected",
+  "fake",
+  "good",
+  "great",
+  "item",
+  "items",
+  "money",
+  "must",
+  "nice",
+  "order",
+  "ordered",
+  "original",
+  "perfect",
+  "poor",
+  "price",
+  "product",
+  "products",
+  "purchase",
+  "purchased",
+  "quality",
+  "report",
+  "received",
+  "seller",
+  "sellers",
+  "shoe",
+  "shoes",
+  "size",
+  "value",
+  "verified",
+  "you"
+]);
+
 const app = express();
 const upload = multer({ storage: multer.memoryStorage() });
 const analyzer = new SentimentAnalyzer();
@@ -190,7 +233,13 @@ function tokenize(text) {
   return String(text || "")
     .split(/\s+/)
     .map((token) => token.trim().toLowerCase())
-    .filter((token) => token.length >= 3 && /^[a-z][a-z0-9]*$/i.test(token) && !STOPWORDS.has(token));
+    .filter(
+      (token) =>
+        token.length >= 3 &&
+        /^[a-z][a-z0-9]*$/i.test(token) &&
+        !STOPWORDS.has(token) &&
+        !DOMAIN_STOPWORDS.has(token)
+    );
 }
 
 function buildTokenList(counter, limit = 12) {
@@ -211,6 +260,46 @@ function buildWordCloudList(counter, limit = 36) {
   }));
 }
 
+function buildDistinctiveWordCloud(counter, tokenCounters, tokenTotals, sentiment, limit = 36) {
+  const targetTotal = tokenTotals[sentiment] || 0;
+
+  if (targetTotal === 0) {
+    return [];
+  }
+
+  const otherSentiments = ["POSITIVE", "NEUTRAL", "NEGATIVE"].filter((item) => item !== sentiment);
+  const otherTotal = otherSentiments.reduce((sum, item) => sum + (tokenTotals[item] || 0), 0);
+
+  const ranked = [...counter.entries()]
+    .map(([text, count]) => {
+      const targetRate = count / targetTotal;
+      const competingCount = otherSentiments.reduce((sum, item) => sum + (tokenCounters[item].get(text) || 0), 0);
+      const competingRate = otherTotal === 0 ? 0 : competingCount / otherTotal;
+      const score = Math.max(0, targetRate - competingRate) * Math.log2(count + 1);
+
+      return {
+        text,
+        count,
+        score
+      };
+    })
+    .filter((item) => item.count >= 2 && item.score > 0)
+    .sort((left, right) => right.score - left.score || right.count - left.count || left.text.localeCompare(right.text))
+    .slice(0, limit);
+
+  if (ranked.length === 0) {
+    return buildWordCloudList(counter, limit);
+  }
+
+  const maxScore = ranked[0]?.score || 1;
+
+  return ranked.map((item) => ({
+    text: item.text,
+    value: item.count,
+    weight: Number((item.score / maxScore).toFixed(3))
+  }));
+}
+
 function buildVisualizations(rows) {
   const aspectSentimentMap = new Map();
   const coverage = { withAspects: 0, withoutAspects: 0 };
@@ -224,6 +313,12 @@ function buildVisualizations(rows) {
     POSITIVE: new Map(),
     NEUTRAL: new Map(),
     NEGATIVE: new Map()
+  };
+  const tokenTotals = {
+    ALL: 0,
+    POSITIVE: 0,
+    NEUTRAL: 0,
+    NEGATIVE: 0
   };
 
   for (const row of rows) {
@@ -239,6 +334,8 @@ function buildVisualizations(rows) {
     for (const token of tokens) {
       tokenCounters.ALL.set(token, (tokenCounters.ALL.get(token) || 0) + 1);
       tokenCounters[sentiment].set(token, (tokenCounters[sentiment].get(token) || 0) + 1);
+      tokenTotals.ALL += 1;
+      tokenTotals[sentiment] += 1;
     }
 
     if (row.aspect_count > 0) {
@@ -288,9 +385,9 @@ function buildVisualizations(rows) {
     ],
     wordCloud: {
       ALL: buildWordCloudList(tokenCounters.ALL),
-      POSITIVE: buildWordCloudList(tokenCounters.POSITIVE),
-      NEUTRAL: buildWordCloudList(tokenCounters.NEUTRAL),
-      NEGATIVE: buildWordCloudList(tokenCounters.NEGATIVE)
+      POSITIVE: buildDistinctiveWordCloud(tokenCounters.POSITIVE, tokenCounters, tokenTotals, "POSITIVE"),
+      NEUTRAL: buildDistinctiveWordCloud(tokenCounters.NEUTRAL, tokenCounters, tokenTotals, "NEUTRAL"),
+      NEGATIVE: buildDistinctiveWordCloud(tokenCounters.NEGATIVE, tokenCounters, tokenTotals, "NEGATIVE")
     }
   };
 }
