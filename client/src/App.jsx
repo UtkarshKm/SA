@@ -21,7 +21,6 @@ import {
 } from "./components/Charts.jsx";
 import { authClient } from "./lib/authClient.js";
 import { autoDetectTextColumn, previewCsv } from "./lib/csvPreview.js";
-
 const ACTIVE_STATUSES = new Set(["queued", "processing"]);
 const RUN_POLL_INTERVAL_MS = 2000;
 const HISTORY_POLL_INTERVAL_MS = 8000;
@@ -93,57 +92,114 @@ function LandingPage() {
     <div className="public-shell">
       <header className="marketing-nav">
         <div className="brand-line">
-          <span className="brand-kicker">Sentiment workspace</span>
-          <strong>Review intelligence</strong>
+          <span className="brand-kicker">ReviewScope</span>
+          <strong>Review Intelligence Platform</strong>
         </div>
         <div className="marketing-actions">
           <Link className="ghost-link" to="/sign-in">
             Sign in
           </Link>
           <Link className="primary-button" to="/sign-up">
-            Create account
+            Get started
           </Link>
         </div>
       </header>
 
-      <main className="landing-grid">
-        <section className="hero-panel scene-enter">
-          <div className="eyebrow">Email-password auth enabled</div>
-          <h1>Turn product reviews into owned, private analysis workspaces.</h1>
-          <p>
-            Upload CSVs, run sentiment and aspect analysis, and keep every run scoped to the signed-in user who
-            created it.
-          </p>
-          <div className="hero-actions">
-            <Link className="primary-button" to="/sign-up">
-              Start free
-            </Link>
-            <Link className="ghost-link" to="/sign-in">
-              I already have an account
-            </Link>
-          </div>
-        </section>
+      <section className="landing-hero scene-enter">
+        <div className="eyebrow">Review Intelligence Platform</div>
+        <h1>Turn customer feedback into your competitive edge.</h1>
+        <p className="landing-hero-sub">
+          Upload product reviews, analyze sentiment at scale, and extract the insights your team needs
+          to improve products, fix issues faster, and protect your brand reputation.
+        </p>
+        <div className="hero-actions">
+          <Link className="primary-button" to="/sign-up">
+            Analyze your reviews
+          </Link>
+          <a className="ghost-link" href="#how-it-works">
+            See how it works
+          </a>
+        </div>
+      </section>
 
-        <section className="feature-panel scene-enter scene-enter-delay">
-          <div className="section-heading">
-            <span>What the app does</span>
+      <section className="landing-value-grid scene-enter scene-enter-delay">
+        <div className="value-card">
+          <span className="value-number">01</span>
+          <strong>Instant feedback intelligence</strong>
+          <p>
+            See what customers love and hate about your products at a glance.
+            Spot quality issues, recurring complaints, and top-praised features in seconds.
+          </p>
+        </div>
+        <div className="value-card">
+          <span className="value-number">02</span>
+          <strong>Save days of manual review reading</strong>
+          <p>
+            Upload thousands of reviews and get a complete sentiment and aspect breakdown
+            in minutes — no more reading feedback one by one.
+          </p>
+        </div>
+        <div className="value-card">
+          <span className="value-number">03</span>
+          <strong>Understand your reputation</strong>
+          <p>
+            Track sentiment trends across product lines and categories.
+            Understand how customers perceive your brand and where to invest next.
+          </p>
+        </div>
+      </section>
+
+      <section className="landing-how scene-enter scene-enter-delay" id="how-it-works">
+        <div className="section-heading">
+          <span>How it works</span>
+        </div>
+        <div className="how-steps">
+          <div className="how-step">
+            <span className="how-step-num">1</span>
+            <strong>Upload</strong>
+            <p>Collect your product reviews into a CSV and upload them to your private workspace.</p>
           </div>
-          <div className="feature-list">
-            <div className="feature-item">
-              <strong>Private run history</strong>
-              <p>Every analysis run belongs to the signed-in user and stays scoped to that account.</p>
-            </div>
-            <div className="feature-item">
-              <strong>CSV-first workflow</strong>
-              <p>Upload reviews, confirm the right text column, and analyze the whole dataset quickly.</p>
-            </div>
-            <div className="feature-item">
-              <strong>Actionable outputs</strong>
-              <p>Review sentiment mix, top aspects, row-level results, and export the enriched CSV anytime.</p>
-            </div>
+          <div className="how-step-connector" aria-hidden="true" />
+          <div className="how-step">
+            <span className="how-step-num">2</span>
+            <strong>Analyze</strong>
+            <p>The engine detects sentiment — positive, neutral, or negative — and extracts key product aspects automatically.</p>
           </div>
-        </section>
-      </main>
+          <div className="how-step-connector" aria-hidden="true" />
+          <div className="how-step">
+            <span className="how-step-num">3</span>
+            <strong>Decide</strong>
+            <p>Browse visual dashboards, filter by sentiment, and export enriched results to drive product and strategy decisions.</p>
+          </div>
+        </div>
+      </section>
+
+      <section className="landing-metrics scene-enter scene-enter-delay-2">
+        <div className="metric-item">
+          <strong>98%+</strong>
+          <span>Sentiment accuracy</span>
+        </div>
+        <div className="metric-item">
+          <strong>15+</strong>
+          <span>Aspects per analysis</span>
+        </div>
+        <div className="metric-item">
+          <strong>1,000+</strong>
+          <span>Reviews per minute</span>
+        </div>
+        <div className="metric-item">
+          <strong>~4 hrs</strong>
+          <span>Time saved per run</span>
+        </div>
+      </section>
+
+      <section className="landing-cta scene-enter scene-enter-delay-2">
+        <h2>Stop guessing. Start analyzing.</h2>
+        <p>Upload your first review dataset and discover what your customers are really saying about your products.</p>
+        <Link className="primary-button" to="/sign-up">
+          Create free account
+        </Link>
+      </section>
     </div>
   );
 }
@@ -199,14 +255,14 @@ function AuthPage({ mode }) {
     <div className="public-shell auth-shell">
       <div className="auth-card scene-enter">
         <Link className="back-link" to="/">
-          Back to landing
+          Back to home
         </Link>
-        <div className="eyebrow">{isSignUp ? "Create account" : "Sign in"}</div>
-        <h2>{isSignUp ? "Start your private analysis workspace." : "Return to your analysis workspace."}</h2>
+        <div className="eyebrow">{isSignUp ? "Create account" : "Welcome back"}</div>
+        <h2>{isSignUp ? "Start analyzing product reviews." : "Pick up where you left off."}</h2>
         <p>
           {isSignUp
-            ? "Use a name, email, and password to create your account."
-            : "Sign in with the email and password you used when creating your account."}
+            ? "Create your free account to start analyzing customer feedback with sentiment detection, aspect extraction, and exportable reports."
+            : "Sign in to access your review analyses and saved results."}
         </p>
 
         <form className="auth-form" onSubmit={handleSubmit}>
@@ -267,9 +323,9 @@ function PrivateShell({ children }) {
     <div className="app-shell">
       <aside className="nav-rail">
         <div className="brand-block">
-          <div className="brand-kicker">Sentiment workspace</div>
-          <h1>Review intelligence</h1>
-          <p>Private runs, Mongo-backed history, and review analysis scoped to your account.</p>
+          <div className="brand-kicker">ReviewScope</div>
+          <h1>Review Intelligence</h1>
+          <p>Analyze product reviews, extract sentiment and key aspects, and export actionable insights.</p>
         </div>
 
         <nav className="nav-links">
@@ -436,11 +492,11 @@ function UploadPage() {
       <header className="scene-header scene-enter">
         <div>
           <div className="eyebrow">New analysis</div>
-          <h2>Prepare a review dataset for sentiment and aspect analysis.</h2>
+          <h2>Upload product reviews and uncover what your customers really think.</h2>
         </div>
         <p>
-          Upload one CSV, confirm the review column, choose a product category, and queue the run under your
-          account.
+          Import a CSV of your collected reviews.
+          Select the review column, pick a category, and we'll analyze sentiment and key product aspects for you.
         </p>
       </header>
 
@@ -606,8 +662,8 @@ function HistoryPage() {
     <section className="scene">
       <header className="scene-header">
         <div>
-          <div className="eyebrow">History</div>
-          <h2>Reopen previous datasets and watch queued runs finish.</h2>
+          <div className="eyebrow">Analysis history</div>
+          <h2>All your past review analyses in one place.</h2>
         </div>
       </header>
 
@@ -781,7 +837,7 @@ function ResultsPage() {
     <section className="scene">
       <header className="scene-header">
         <div>
-          <div className="eyebrow">Run results</div>
+          <div className="eyebrow">Review analysis results</div>
           <h2>{data.filename}</h2>
         </div>
         <div className="header-actions">

@@ -1,0 +1,754 @@
+/* =========================================================================
+   v1 — EDITORIAL BROADSHEET
+   Cream paper, ink-black typography, oxblood accent, Fraunces + IBM Plex.
+   Inspired by print editorial design: hairline rules, asymmetric composition,
+   generous whitespace, tabular numerals, restrained motion.
+   ========================================================================= */
+[data-theme="1"] {
+  color-scheme: light;
+
+  /* ---------- palette ---------- */
+  --bg: #F2ECDE;
+  --bg-alt: #EAE2D0;
+  --panel-bg: #F8F3E6;
+  --ink: #161413;
+  --text: #161413;
+  --muted: #6B6257;
+  --line: rgba(22, 20, 19, 0.14);
+  --line-strong: rgba(22, 20, 19, 0.28);
+
+  --accent: #7A1F1F;
+  --accent-fg: #F8F3E6;
+  --accent-soft: rgba(122, 31, 31, 0.08);
+
+  --positive: #2F5D3F;
+  --positive-soft: rgba(47, 93, 63, 0.1);
+  --positive-border: rgba(47, 93, 63, 0.35);
+
+  --neutral: #5B5547;
+  --neutral-soft: rgba(91, 85, 71, 0.08);
+  --neutral-border: rgba(91, 85, 71, 0.3);
+
+  --negative: #A23A1E;
+  --negative-soft: rgba(162, 58, 30, 0.1);
+  --negative-border: rgba(162, 58, 30, 0.35);
+
+  /* ---------- typography ---------- */
+  --font-display: "Fraunces", "Source Serif 4", Georgia, serif;
+  --font-body: "IBM Plex Sans", "Inter", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", "JetBrains Mono", ui-monospace, monospace;
+  --font-label: "IBM Plex Sans", sans-serif;
+  --display-weight: 500;
+  --display-tracking: -0.025em;
+  --label-tracking: 0.22em;
+  --body-features: "ss01", "cv11", "cv02";
+
+  /* ---------- shapes ---------- */
+  --radius-sm: 2px;
+  --radius-md: 3px;
+  --radius-lg: 4px;
+  --radius-pill: 999px;
+
+  /* ---------- panels ---------- */
+  --panel-border: 1px solid var(--line);
+  --panel-shadow: none;
+  --panel-blur: none;
+  --panel-pad: var(--space-7);
+
+  /* ---------- hairlines ---------- */
+  --hairline: 1px solid var(--line);
+  --nav-rule: 1px solid var(--ink);
+
+  /* ---------- shell / rail ---------- */
+  --rail-width: 300px;
+  --rail-border: 1px solid var(--ink);
+  --rail-bg: var(--bg-alt);
+
+  /* ---------- buttons ---------- */
+  --btn-border: 0;
+  --btn-tracking: 0.04em;
+  --btn-transform: none;
+  --btn-hover-shadow: 0 10px 24px rgba(122, 31, 31, 0.18);
+
+  /* ---------- inputs ---------- */
+  --input-bg: #FBF6EA;
+  --input-border: 1px solid var(--line-strong);
+  --input-pad: 14px 16px;
+  --focus-shadow: 0 0 0 3px rgba(122, 31, 31, 0.15);
+  --focus-ring: var(--accent);
+
+  /* ---------- file drop ---------- */
+  --drop-bg: repeating-linear-gradient(
+      45deg,
+      transparent 0,
+      transparent 14px,
+      rgba(22, 20, 19, 0.03) 14px,
+      rgba(22, 20, 19, 0.03) 15px
+    ),
+    #FBF6EA;
+  --drop-border: 1.5px solid var(--ink);
+  --drop-hover-bg: repeating-linear-gradient(
+      45deg,
+      transparent 0,
+      transparent 14px,
+      rgba(122, 31, 31, 0.06) 14px,
+      rgba(122, 31, 31, 0.06) 15px
+    ),
+    #FBF6EA;
+
+  /* ---------- progress ---------- */
+  --track-bg: rgba(22, 20, 19, 0.1);
+  --track-fill: var(--ink);
+  --track-glow: none;
+
+  /* ---------- stats / rows ---------- */
+  --stat-bg: transparent;
+  --stat-border: 1px solid var(--line);
+  --row-hover-bg: rgba(122, 31, 31, 0.04);
+  --ghost-bg: transparent;
+  --ghost-hover-bg: rgba(22, 20, 19, 0.05);
+
+  --nav-active-bg: var(--ink);
+  --nav-active-border: var(--ink);
+  --table-head-bg: var(--bg-alt);
+
+  --selection-bg: var(--accent);
+  --selection-fg: #F8F3E6;
+
+  /* ---------- hero type ---------- */
+  --hero-size: clamp(3.5rem, 8vw, 6.5rem);
+  --hero-max: 12ch;
+  --h2-size: clamp(2rem, 4vw, 3.5rem);
+  --h3-size: clamp(1.375rem, 2.4vw, 1.75rem);
+  --rail-h1-size: clamp(2rem, 3vw, 2.75rem);
+
+  /* ---------- motion ---------- */
+  --anim-rise: 500ms;
+  --rise-offset: 12px;
+
+  /* ---------- chart palette (consumed by useChartPalette) ---------- */
+  --chart-positive: #2F5D3F;
+  --chart-neutral: #8C8371;
+  --chart-negative: #A23A1E;
+  --chart-accent: #7A1F1F;
+  --chart-accent-soft: rgba(122, 31, 31, 0.15);
+  --chart-grid: rgba(22, 20, 19, 0.12);
+  --chart-text: #6B6257;
+  --chart-tooltip-bg: #F8F3E6;
+  --chart-tooltip-border: rgba(22, 20, 19, 0.18);
+  --chart-tooltip-text: #161413;
+  --chart-bar-radius: 0;
+}
+
+[data-theme="1"] body {
+  background:
+    linear-gradient(180deg, transparent 0, transparent 320px, rgba(22, 20, 19, 0.02) 320px, transparent 321px),
+    var(--bg);
+}
+
+/* Paper grain */
+[data-theme="1"] body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.09 0 0 0 0 0.08 0 0 0 0 0.07 0 0 0 0.4 0'/></filter><rect width='100%' height='100%' filter='url(%23n)' opacity='0.5'/></svg>");
+  opacity: 0.12;
+  mix-blend-mode: multiply;
+  z-index: 0;
+}
+
+[data-theme="1"] #root {
+  position: relative;
+  z-index: 1;
+}
+
+/* ---------- Editorial type details ---------- */
+[data-theme="1"] h1,
+[data-theme="1"] h2 {
+  font-style: normal;
+  font-variation-settings: "SOFT" 30, "WONK" 0, "opsz" 72;
+}
+
+[data-theme="1"] .brand-line strong,
+[data-theme="1"] .feature-item strong,
+[data-theme="1"] .history-row strong,
+[data-theme="1"] .file-drop strong,
+[data-theme="1"] .progress-head h3,
+[data-theme="1"] .empty-state h3,
+[data-theme="1"] .timeline-item strong {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-variation-settings: "SOFT" 50, "WONK" 1, "opsz" 24;
+  font-weight: 500;
+}
+
+[data-theme="1"] .eyebrow,
+[data-theme="1"] .brand-kicker,
+[data-theme="1"] .file-drop-label {
+  color: var(--accent);
+  font-weight: 600;
+  font-feature-settings: "ss01";
+}
+
+[data-theme="1"] .eyebrow::before {
+  content: "";
+}
+
+/* ---------- Marketing nav ---------- */
+[data-theme="1"] .marketing-nav {
+  border-bottom: 1px solid var(--ink);
+  padding-bottom: var(--space-4);
+}
+
+[data-theme="1"] .marketing-nav .brand-line strong {
+  font-style: italic;
+  font-size: var(--text-xl);
+}
+
+/* ---------- Landing hero ---------- */
+[data-theme="1"] .landing-grid {
+  grid-template-columns: 1.35fr 0.65fr;
+  gap: var(--space-7);
+  padding-top: var(--space-6);
+}
+
+[data-theme="1"] .hero-panel {
+  background: transparent;
+  border: 0;
+  padding: var(--space-5) 0 var(--space-7);
+  position: relative;
+}
+
+[data-theme="1"] .hero-panel h1 {
+  font-weight: 500;
+  font-style: normal;
+  letter-spacing: -0.035em;
+}
+
+[data-theme="1"] .hero-panel h1::first-line {
+  font-style: italic;
+}
+
+[data-theme="1"] .hero-panel p {
+  max-width: 52ch;
+  font-size: var(--text-md);
+  margin-bottom: var(--space-6);
+  border-left: 2px solid var(--ink);
+  padding-left: var(--space-4);
+}
+
+[data-theme="1"] .feature-panel {
+  background: transparent;
+  border: 0;
+  border-left: 1px solid var(--ink);
+  padding: var(--space-5) var(--space-6);
+  position: relative;
+}
+
+[data-theme="1"] .feature-panel::before {
+  content: "Vol. 01 / Edition 04";
+  position: absolute;
+  top: 0;
+  left: var(--space-6);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+[data-theme="1"] .feature-item {
+  border-top: 1px solid var(--ink);
+}
+
+[data-theme="1"] .feature-item strong {
+  font-size: var(--text-lg);
+}
+
+/* ---------- Auth ---------- */
+[data-theme="1"] .auth-card {
+  background: var(--panel-bg);
+  border: 1px solid var(--ink);
+  padding: var(--space-7);
+  box-shadow: 8px 8px 0 var(--ink);
+}
+
+[data-theme="1"] .auth-card h2 {
+  font-style: italic;
+  font-weight: 500;
+}
+
+/* ---------- Buttons ---------- */
+[data-theme="1"] .primary-button {
+  background: var(--ink);
+  color: var(--bg);
+  border-radius: var(--radius-pill);
+  padding: 14px 28px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  border: 0;
+  position: relative;
+  transition: background var(--motion-fast) var(--ease-out),
+    transform var(--motion-fast) var(--ease-out),
+    box-shadow var(--motion-fast) var(--ease-out);
+}
+
+[data-theme="1"] .primary-button:hover {
+  background: var(--accent);
+  box-shadow: 0 8px 0 rgba(22, 20, 19, 0.12);
+  transform: translateY(-2px);
+}
+
+[data-theme="1"] .primary-button.ghost {
+  background: transparent;
+  color: var(--ink);
+  border: 1px solid var(--ink);
+  box-shadow: none;
+}
+
+[data-theme="1"] .primary-button.ghost:hover {
+  background: var(--ink);
+  color: var(--bg);
+  transform: translateY(-2px);
+}
+
+[data-theme="1"] .pagination-button {
+  background: transparent;
+  color: var(--ink);
+  border: 1px solid var(--ink);
+}
+
+[data-theme="1"] .pagination-button:hover:not(:disabled) {
+  background: var(--ink);
+  color: var(--bg);
+}
+
+[data-theme="1"] .ghost-button {
+  border: 1px solid var(--ink);
+  background: transparent;
+  color: var(--ink);
+}
+
+[data-theme="1"] .ghost-button:hover {
+  background: var(--ink);
+  color: var(--bg);
+}
+
+[data-theme="1"] .ghost-button.danger-button {
+  border-color: var(--negative);
+  color: var(--negative);
+  background: transparent;
+}
+
+[data-theme="1"] .ghost-button.danger-button:hover {
+  background: var(--negative);
+  color: var(--bg);
+}
+
+/* ---------- Nav rail ---------- */
+[data-theme="1"] .nav-rail {
+  background: var(--bg-alt);
+  border-right: 1px solid var(--ink);
+}
+
+[data-theme="1"] .brand-block h1 {
+  font-style: italic;
+  font-weight: 500;
+}
+
+[data-theme="1"] .nav-links a {
+  border-bottom: 1px solid transparent;
+  border-radius: 0;
+  padding: var(--space-3) 0;
+  color: var(--ink);
+  font-weight: 500;
+  letter-spacing: -0.005em;
+  position: relative;
+}
+
+[data-theme="1"] .nav-links a::before {
+  content: "→";
+  opacity: 0;
+  margin-right: var(--space-2);
+  transition: opacity var(--motion-fast) var(--ease-out),
+    margin var(--motion-fast) var(--ease-out);
+  color: var(--accent);
+}
+
+[data-theme="1"] .nav-links a:hover {
+  background: transparent;
+  color: var(--accent);
+}
+
+[data-theme="1"] .nav-links a:hover::before,
+[data-theme="1"] .nav-links a.active::before {
+  opacity: 1;
+}
+
+[data-theme="1"] .nav-links a.active {
+  background: transparent;
+  color: var(--accent);
+  border-color: transparent;
+  border-bottom: 1px solid var(--accent);
+}
+
+/* ---------- Scene ---------- */
+[data-theme="1"] .scene-header {
+  border-bottom: 1px solid var(--ink);
+  padding-bottom: var(--space-5);
+}
+
+[data-theme="1"] .scene-header h2 {
+  font-weight: 500;
+  font-style: normal;
+}
+
+[data-theme="1"] .scene-header h2 em,
+[data-theme="1"] .scene-header h2 i {
+  font-style: italic;
+}
+
+/* ---------- Panels ---------- */
+[data-theme="1"] .upload-stage,
+[data-theme="1"] .preview-stage,
+[data-theme="1"] .history-list,
+[data-theme="1"] .table-stage,
+[data-theme="1"] .run-details,
+[data-theme="1"] .progress-shell,
+[data-theme="1"] .chart-shell,
+[data-theme="1"] .empty-state {
+  background: var(--panel-bg);
+  border: 1px solid var(--line);
+  box-shadow: none;
+}
+
+/* ---------- Stats ---------- */
+[data-theme="1"] .stat-block {
+  background: var(--panel-bg);
+  border: 1px solid var(--line);
+  border-top: 3px solid var(--ink);
+  padding: var(--space-5);
+}
+
+[data-theme="1"] .tone-positive {
+  border-top-color: var(--positive);
+}
+[data-theme="1"] .tone-neutral {
+  border-top-color: var(--neutral);
+}
+[data-theme="1"] .tone-negative {
+  border-top-color: var(--negative);
+}
+
+[data-theme="1"] .stat-block strong {
+  font-weight: 500;
+  font-variation-settings: "SOFT" 30, "opsz" 72;
+}
+
+/* ---------- Detail ---------- */
+[data-theme="1"] .detail-item strong {
+  color: var(--ink);
+  font-family: var(--font-mono);
+}
+
+/* ---------- Timeline ---------- */
+[data-theme="1"] .timeline-dot {
+  background: var(--ink);
+  box-shadow: 0 0 0 4px rgba(22, 20, 19, 0.08);
+}
+
+/* ---------- Chips / tags ---------- */
+[data-theme="1"] .status-chip {
+  border-radius: 2px;
+  font-weight: 600;
+}
+
+[data-theme="1"] .sentiment-tag {
+  border-radius: 2px;
+  border: 1px solid currentColor;
+}
+
+/* ---------- Column pills ---------- */
+[data-theme="1"] .column-pill {
+  border-radius: 2px;
+  background: transparent;
+  border: 1px solid var(--line-strong);
+  font-weight: 500;
+}
+
+[data-theme="1"] .column-pill.active {
+  background: var(--ink);
+  color: var(--bg);
+  border-color: var(--ink);
+}
+
+/* ---------- Tables ---------- */
+[data-theme="1"] .preview-table th,
+[data-theme="1"] .results-table th {
+  background: var(--bg-alt);
+  border-bottom: 1.5px solid var(--ink);
+}
+
+/* ---------- History ---------- */
+[data-theme="1"] .history-row {
+  border-radius: 0;
+}
+
+[data-theme="1"] .history-row:hover {
+  background: transparent;
+  color: var(--accent);
+}
+
+[data-theme="1"] .history-row:hover strong {
+  text-decoration: underline;
+  text-decoration-color: var(--accent);
+  text-underline-offset: 4px;
+  color: var(--accent);
+}
+
+/* ---------- Back link ---------- */
+[data-theme="1"] .back-link::before {
+  content: "← ";
+}
+
+/* ---------- Progress fill ---------- */
+[data-theme="1"] .progress-fill {
+  background: var(--ink);
+  box-shadow: none;
+}
+
+/* ---------- Word cloud ---------- */
+[data-theme="1"] .word-cloud-token {
+  font-style: italic;
+  font-weight: 500;
+}
+
+[data-theme="1"] .word-cloud-shell::before {
+  background: none;
+}
+
+/* ---------- Decorative red rule on hero ---------- */
+[data-theme="1"] .hero-panel::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 64px;
+  height: 3px;
+  background: var(--accent);
+}
+
+/* ---------- Oversized issue number ---------- */
+[data-theme="1"] .hero-panel::after {
+  content: "No. 01";
+  position: absolute;
+  bottom: var(--space-5);
+  right: 0;
+  font-family: var(--font-display);
+  font-size: clamp(6rem, 14vw, 11rem);
+  font-weight: 500;
+  font-style: italic;
+  line-height: 0.8;
+  color: rgba(22, 20, 19, 0.04);
+  pointer-events: none;
+  letter-spacing: -0.04em;
+}
+
+/* ---------- Hanging quote on feature descriptions ---------- */
+[data-theme="1"] .feature-item p::before {
+  content: "\2014\00a0";
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* ---------- Elegant column rule through chart area ---------- */
+[data-theme="1"] .results-grid-primary {
+  position: relative;
+}
+
+[data-theme="1"] .results-grid-primary::before {
+  content: "";
+  position: absolute;
+  top: var(--space-5);
+  bottom: var(--space-5);
+  left: calc(45.5% - 0.5px);
+  width: 1px;
+  background: var(--ink);
+  opacity: 0.1;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ---------- Red initial accent on stat labels ---------- */
+[data-theme="1"] .stat-block span::first-letter {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+/* ---------- Table row alternation ---------- */
+[data-theme="1"] .results-table tbody tr:nth-child(even) {
+  background: rgba(22, 20, 19, 0.02);
+}
+
+/* ---------- Subtle horizontal rule accents on timeline items ---------- */
+[data-theme="1"] .timeline-item {
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--line);
+}
+
+[data-theme="1"] .timeline-item:last-child {
+  border-bottom: 0;
+}
+
+/* ---------- New landing: hero ---------- */
+[data-theme="1"] .landing-hero {
+  text-align: left;
+  padding: var(--space-7) 0 var(--space-9);
+  border-bottom: 1px solid var(--ink);
+  position: relative;
+}
+
+[data-theme="1"] .landing-hero::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 64px;
+  height: 3px;
+  background: var(--accent);
+}
+
+[data-theme="1"] .landing-hero h1 {
+  font-weight: 500;
+  font-style: normal;
+  letter-spacing: -0.035em;
+  max-width: 16ch;
+  margin-left: 0;
+  margin-right: auto;
+}
+
+[data-theme="1"] .landing-hero h1::first-line {
+  font-style: italic;
+}
+
+[data-theme="1"] .landing-hero-sub {
+  margin-left: 0;
+  border-left: 2px solid var(--ink);
+  padding-left: var(--space-4);
+  font-size: var(--text-md);
+}
+
+[data-theme="1"] .landing-hero .hero-actions {
+  justify-content: flex-start;
+}
+
+/* ---------- New landing: value cards ---------- */
+[data-theme="1"] .value-card {
+  background: transparent;
+  border: 0;
+  border-top: 1px solid var(--ink);
+  border-radius: 0;
+  box-shadow: none;
+  padding: var(--space-6) 0 var(--space-4);
+}
+
+[data-theme="1"] .value-card:hover {
+  transform: none;
+  box-shadow: none;
+}
+
+[data-theme="1"] .value-number {
+  font-style: italic;
+  color: var(--accent);
+  opacity: 0.35;
+}
+
+[data-theme="1"] .value-card strong {
+  font-style: italic;
+  font-weight: 500;
+  font-variation-settings: "SOFT" 50, "WONK" 1;
+}
+
+[data-theme="1"] .value-card p::before {
+  content: "\2014\00a0";
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* ---------- New landing: how it works ---------- */
+[data-theme="1"] .how-step {
+  background: transparent;
+  border: 0;
+  border-top: 1px solid var(--ink);
+  border-radius: 0;
+  text-align: left;
+  padding: var(--space-5) 0;
+}
+
+[data-theme="1"] .how-step:hover {
+  transform: none;
+}
+
+[data-theme="1"] .how-step-num {
+  background: var(--ink);
+  color: var(--bg);
+  margin: 0;
+  width: 40px;
+  height: 40px;
+  font-size: var(--text-lg);
+}
+
+[data-theme="1"] .how-step strong {
+  font-style: italic;
+  font-weight: 500;
+}
+
+[data-theme="1"] .how-step-connector {
+  background: var(--ink);
+  opacity: 0.15;
+}
+
+/* ---------- New landing: metrics ---------- */
+[data-theme="1"] .landing-metrics {
+  border-top: 1px solid var(--ink);
+  border-bottom: 1px solid var(--ink);
+}
+
+[data-theme="1"] .metric-item strong {
+  font-weight: 500;
+  font-style: italic;
+  font-variation-settings: "SOFT" 30, "opsz" 72;
+}
+
+[data-theme="1"] .metric-item span::first-letter {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+/* ---------- New landing: CTA ---------- */
+[data-theme="1"] .landing-cta {
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-top: 3px solid var(--ink);
+  border-radius: 0;
+  padding: var(--space-7) 0;
+}
+
+[data-theme="1"] .landing-cta h2 {
+  font-style: italic;
+  font-weight: 500;
+}
+
+[data-theme="1"] .landing-cta p {
+  margin-left: 0;
+  border-left: 2px solid var(--accent);
+  padding-left: var(--space-4);
+}
+
+/* ---------- Selection in editorial: oxblood text on paper ---------- */
+[data-theme="1"] ::selection {
+  background: var(--accent);
+  color: #F8F3E6;
+}

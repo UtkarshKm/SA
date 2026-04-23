@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
   Bar,
   BarChart,
@@ -12,20 +12,70 @@ import {
   YAxis
 } from "recharts";
 
-const SENTIMENT_COLORS = {
-  POSITIVE: "#6dd3a8",
-  NEUTRAL: "#b8c5d6",
-  NEGATIVE: "#f07c64"
-};
+function readPalette() {
+  if (typeof window === "undefined") {
+    return {};
+  }
+  const styles = getComputedStyle(document.documentElement);
+  const read = (name, fallback) => {
+    const value = styles.getPropertyValue(name).trim();
+    return value || fallback;
+  };
+  const radiusRaw = read("--chart-bar-radius", "10");
+  const radius = Number.parseFloat(radiusRaw) || 0;
 
-const COVERAGE_COLORS = ["#9cc6ff", "rgba(255,255,255,0.16)"];
-
-function chartTooltipStyle() {
   return {
-    background: "#111922",
-    border: "1px solid rgba(255,255,255,0.08)",
-    borderRadius: "14px",
-    color: "#f5f7fa"
+    POSITIVE: read("--chart-positive", "#6dd3a8"),
+    NEUTRAL: read("--chart-neutral", "#b8c5d6"),
+    NEGATIVE: read("--chart-negative", "#f07c64"),
+    accent: read("--chart-accent", "#9cc6ff"),
+    accentSoft: read("--chart-accent-soft", "rgba(156, 198, 255, 0.16)"),
+    grid: read("--chart-grid", "rgba(255,255,255,0.08)"),
+    text: read("--chart-text", "#97a6b7"),
+    tooltipBg: read("--chart-tooltip-bg", "#111922"),
+    tooltipBorder: read("--chart-tooltip-border", "rgba(255,255,255,0.1)"),
+    tooltipText: read("--chart-tooltip-text", "#f5f7fa"),
+    barRadius: radius
+  };
+}
+
+function useChartPalette() {
+  const [palette, setPalette] = useState(() => readPalette());
+
+  useEffect(() => {
+    function sync() {
+      setPalette(readPalette());
+    }
+
+    window.addEventListener("themechange", sync);
+    // Also observe data-theme attribute mutations as a safety net.
+    const observer = new MutationObserver(sync);
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["data-theme"]
+    });
+
+    sync();
+
+    return () => {
+      window.removeEventListener("themechange", sync);
+      observer.disconnect();
+    };
+  }, []);
+
+  return palette;
+}
+
+function tooltipStyle(palette) {
+  return {
+    background: palette.tooltipBg,
+    border: `1px solid ${palette.tooltipBorder}`,
+    borderRadius: "10px",
+    color: palette.tooltipText,
+    boxShadow: "0 12px 32px rgba(0,0,0,0.3)",
+    fontFamily: "inherit",
+    fontSize: "12px",
+    padding: "8px 12px"
   };
 }
 
@@ -34,7 +84,9 @@ function EmptyChartState({ label }) {
 }
 
 export function SentimentChart({ counts }) {
+  const palette = useChartPalette();
   const data = Object.entries(counts).map(([name, value]) => ({ name, value }));
+  const r = palette.barRadius;
 
   return (
     <div className="chart-shell chart-shell-tall">
@@ -43,13 +95,13 @@ export function SentimentChart({ counts }) {
       </div>
       <ResponsiveContainer width="100%" height={320}>
         <BarChart data={data} margin={{ top: 12, right: 24, left: -8, bottom: 6 }}>
-          <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
-          <XAxis dataKey="name" stroke="#97a6b7" tickLine={false} axisLine={false} tickMargin={10} />
-          <YAxis stroke="#97a6b7" tickLine={false} axisLine={false} tickMargin={10} />
-          <Tooltip contentStyle={chartTooltipStyle()} />
-          <Bar dataKey="value" radius={[14, 14, 0, 0]}>
+          <CartesianGrid stroke={palette.grid} vertical={false} />
+          <XAxis dataKey="name" stroke={palette.text} tickLine={false} axisLine={false} tickMargin={10} />
+          <YAxis stroke={palette.text} tickLine={false} axisLine={false} tickMargin={10} />
+          <Tooltip contentStyle={tooltipStyle(palette)} cursor={{ fill: palette.accentSoft }} />
+          <Bar dataKey="value" radius={[r, r, 0, 0]}>
             {data.map((entry) => (
-              <Cell key={entry.name} fill={SENTIMENT_COLORS[entry.name]} />
+              <Cell key={entry.name} fill={palette[entry.name]} />
             ))}
           </Bar>
         </BarChart>
@@ -59,7 +111,9 @@ export function SentimentChart({ counts }) {
 }
 
 export function AspectChart({ aspects }) {
+  const palette = useChartPalette();
   const data = aspects.length > 0 ? aspects : [{ name: "No aspects", count: 0 }];
+  const r = palette.barRadius;
 
   return (
     <div className="chart-shell chart-shell-tall">
@@ -68,19 +122,19 @@ export function AspectChart({ aspects }) {
       </div>
       <ResponsiveContainer width="100%" height={320}>
         <BarChart data={data} layout="vertical" margin={{ top: 12, right: 24, left: 28, bottom: 6 }}>
-          <CartesianGrid stroke="rgba(255,255,255,0.08)" horizontal={false} />
-          <XAxis type="number" stroke="#97a6b7" tickLine={false} axisLine={false} tickMargin={10} />
+          <CartesianGrid stroke={palette.grid} horizontal={false} />
+          <XAxis type="number" stroke={palette.text} tickLine={false} axisLine={false} tickMargin={10} />
           <YAxis
             type="category"
             dataKey="name"
             width={128}
-            stroke="#97a6b7"
+            stroke={palette.text}
             tickLine={false}
             axisLine={false}
             tickMargin={10}
           />
-          <Tooltip contentStyle={chartTooltipStyle()} />
-          <Bar dataKey="count" fill="#9cc6ff" radius={[0, 14, 14, 0]} />
+          <Tooltip contentStyle={tooltipStyle(palette)} cursor={{ fill: palette.accentSoft }} />
+          <Bar dataKey="count" fill={palette.accent} radius={[0, r, r, 0]} />
         </BarChart>
       </ResponsiveContainer>
     </div>
@@ -88,6 +142,8 @@ export function AspectChart({ aspects }) {
 }
 
 export function AspectSentimentChart({ data }) {
+  const palette = useChartPalette();
+
   if (!data || data.length === 0) {
     return (
       <div className="chart-shell chart-shell-wide">
@@ -106,13 +162,13 @@ export function AspectSentimentChart({ data }) {
       </div>
       <ResponsiveContainer width="100%" height={360}>
         <BarChart data={data} margin={{ top: 12, right: 24, left: 8, bottom: 14 }}>
-          <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
-          <XAxis dataKey="aspect" stroke="#97a6b7" tickLine={false} axisLine={false} tickMargin={12} />
-          <YAxis stroke="#97a6b7" tickLine={false} axisLine={false} tickMargin={10} />
-          <Tooltip contentStyle={chartTooltipStyle()} />
-          <Bar dataKey="POSITIVE" stackId="sentiment" fill={SENTIMENT_COLORS.POSITIVE} />
-          <Bar dataKey="NEUTRAL" stackId="sentiment" fill={SENTIMENT_COLORS.NEUTRAL} />
-          <Bar dataKey="NEGATIVE" stackId="sentiment" fill={SENTIMENT_COLORS.NEGATIVE} />
+          <CartesianGrid stroke={palette.grid} vertical={false} />
+          <XAxis dataKey="aspect" stroke={palette.text} tickLine={false} axisLine={false} tickMargin={12} />
+          <YAxis stroke={palette.text} tickLine={false} axisLine={false} tickMargin={10} />
+          <Tooltip contentStyle={tooltipStyle(palette)} cursor={{ fill: palette.accentSoft }} />
+          <Bar dataKey="POSITIVE" stackId="sentiment" fill={palette.POSITIVE} />
+          <Bar dataKey="NEUTRAL" stackId="sentiment" fill={palette.NEUTRAL} />
+          <Bar dataKey="NEGATIVE" stackId="sentiment" fill={palette.NEGATIVE} />
         </BarChart>
       </ResponsiveContainer>
     </div>
@@ -120,7 +176,9 @@ export function AspectSentimentChart({ data }) {
 }
 
 export function AspectCoverageChart({ data }) {
+  const palette = useChartPalette();
   const chartData = data && data.length > 0 ? data : [{ name: "No data", value: 1 }];
+  const coverageColors = [palette.accent, palette.grid];
 
   return (
     <div className="chart-shell chart-shell-compact">
@@ -136,18 +194,19 @@ export function AspectCoverageChart({ data }) {
             innerRadius={76}
             outerRadius={108}
             paddingAngle={4}
+            stroke="none"
           >
             {chartData.map((entry, index) => (
-              <Cell key={entry.name} fill={COVERAGE_COLORS[index % COVERAGE_COLORS.length]} />
+              <Cell key={entry.name} fill={coverageColors[index % coverageColors.length]} />
             ))}
           </Pie>
-          <Tooltip contentStyle={chartTooltipStyle()} />
+          <Tooltip contentStyle={tooltipStyle(palette)} />
         </PieChart>
       </ResponsiveContainer>
       <div className="coverage-legend">
         {chartData.map((entry, index) => (
           <div className="coverage-item" key={entry.name}>
-            <span className="coverage-swatch" style={{ background: COVERAGE_COLORS[index % COVERAGE_COLORS.length] }} />
+            <span className="coverage-swatch" style={{ background: coverageColors[index % coverageColors.length] }} />
             <strong>{entry.value}</strong>
             <span>{entry.name}</span>
           </div>
@@ -158,6 +217,9 @@ export function AspectCoverageChart({ data }) {
 }
 
 export function ReviewLengthChart({ data }) {
+  const palette = useChartPalette();
+  const r = palette.barRadius;
+
   if (!data || data.length === 0) {
     return (
       <div className="chart-shell chart-shell-compact">
@@ -176,13 +238,17 @@ export function ReviewLengthChart({ data }) {
       </div>
       <ResponsiveContainer width="100%" height={300}>
         <BarChart data={data} margin={{ top: 12, right: 24, left: -8, bottom: 6 }}>
-          <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
-          <XAxis dataKey="sentiment" stroke="#97a6b7" tickLine={false} axisLine={false} tickMargin={10} />
-          <YAxis stroke="#97a6b7" tickLine={false} axisLine={false} tickMargin={10} />
-          <Tooltip contentStyle={chartTooltipStyle()} formatter={(value) => [`${value} words`, "Average length"]} />
-          <Bar dataKey="averageWords" radius={[14, 14, 0, 0]}>
+          <CartesianGrid stroke={palette.grid} vertical={false} />
+          <XAxis dataKey="sentiment" stroke={palette.text} tickLine={false} axisLine={false} tickMargin={10} />
+          <YAxis stroke={palette.text} tickLine={false} axisLine={false} tickMargin={10} />
+          <Tooltip
+            contentStyle={tooltipStyle(palette)}
+            cursor={{ fill: palette.accentSoft }}
+            formatter={(value) => [`${value} words`, "Average length"]}
+          />
+          <Bar dataKey="averageWords" radius={[r, r, 0, 0]}>
             {data.map((entry) => (
-              <Cell key={entry.sentiment} fill={SENTIMENT_COLORS[entry.sentiment]} />
+              <Cell key={entry.sentiment} fill={palette[entry.sentiment]} />
             ))}
           </Bar>
         </BarChart>
@@ -192,6 +258,8 @@ export function ReviewLengthChart({ data }) {
 }
 
 export function KeywordBreakdownChart({ frequencies }) {
+  const palette = useChartPalette();
+  const r = palette.barRadius;
   const positive = frequencies?.POSITIVE?.slice(0, 8) || [];
   const negative = frequencies?.NEGATIVE?.slice(0, 8) || [];
   const tokenMap = new Map();
@@ -240,12 +308,12 @@ export function KeywordBreakdownChart({ frequencies }) {
       </div>
       <ResponsiveContainer width="100%" height={360}>
         <BarChart data={data} layout="vertical" margin={{ top: 12, right: 24, left: 32, bottom: 6 }}>
-          <CartesianGrid stroke="rgba(255,255,255,0.08)" horizontal={false} />
-          <XAxis type="number" stroke="#97a6b7" tickLine={false} axisLine={false} tickMargin={10} />
-          <YAxis type="category" dataKey="token" width={132} interval={0} tickMargin={12} stroke="#97a6b7" tickLine={false} axisLine={false} />
-          <Tooltip contentStyle={chartTooltipStyle()} />
-          <Bar dataKey="positive" fill={SENTIMENT_COLORS.POSITIVE} radius={[0, 14, 14, 0]} />
-          <Bar dataKey="negative" fill={SENTIMENT_COLORS.NEGATIVE} radius={[0, 14, 14, 0]} />
+          <CartesianGrid stroke={palette.grid} horizontal={false} />
+          <XAxis type="number" stroke={palette.text} tickLine={false} axisLine={false} tickMargin={10} />
+          <YAxis type="category" dataKey="token" width={132} interval={0} tickMargin={12} stroke={palette.text} tickLine={false} axisLine={false} />
+          <Tooltip contentStyle={tooltipStyle(palette)} cursor={{ fill: palette.accentSoft }} />
+          <Bar dataKey="positive" fill={palette.POSITIVE} radius={[0, r, r, 0]} />
+          <Bar dataKey="negative" fill={palette.NEGATIVE} radius={[0, r, r, 0]} />
         </BarChart>
       </ResponsiveContainer>
     </div>
@@ -289,4 +357,3 @@ export function WordCloudPanel({ cloud, sentiment, onSentimentChange }) {
     </div>
   );
 }
-
