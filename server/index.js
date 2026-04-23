@@ -13,6 +13,7 @@ import {
   getRunByIdForUser,
   getRunMetadataByIdForUser,
   listRunsByUser,
+  markActiveRunsInterrupted,
   requestRunCancel
 } from "./lib/runRepository.js";
 import { enqueueRunProcessing } from "./lib/runProcessor.js";
@@ -523,6 +524,11 @@ app.use((error, _request, response, _next) => {
 });
 
 await connectDatabase();
+const interruptedRuns = await markActiveRunsInterrupted();
+
+if (interruptedRuns > 0) {
+  console.warn(`[run:recovery] marked ${interruptedRuns} interrupted run(s) as failed after server startup`);
+}
 
 app.listen(PORT, HOST, () => {
   console.log(`Sentiment app server listening on http://${HOST}:${PORT}`);
