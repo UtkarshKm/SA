@@ -90,6 +90,16 @@ This starts:
 - Frontend: [http://localhost:5173](http://localhost:5173)
 - Backend: [http://localhost:3001](http://localhost:3001)
 
+`npm run dev` now uses a stable backend process so long-running analyses are not interrupted by file-watch restarts.
+
+If you specifically want backend auto-restart during development, use:
+
+```powershell
+npm run dev:server:watch
+```
+
+Use watch mode carefully while running analyses, because an API restart will interrupt any in-flight run.
+
 ## How To Use
 
 1. Open [http://localhost:5173](http://localhost:5173)
@@ -404,6 +414,12 @@ Start backend only:
 
 ```powershell
 node server\index.js
+```
+
+Start backend in watch mode:
+
+```powershell
+npm run dev:server:watch
 ```
 
 ## Current Limitations
