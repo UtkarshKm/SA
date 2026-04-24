@@ -217,7 +217,7 @@ function tokenize(text) {
     .map((token) => token.trim().toLowerCase())
     .filter(
       (token) =>
-        token.length >= 3 &&
+        (token.length >= 3 || NEGATION_WORDS.has(token)) &&
         /^[a-z][a-z0-9]*$/i.test(token) &&
         (!STOPWORDS.has(token) || NEGATION_WORDS.has(token)) &&
         !DOMAIN_STOPWORDS.has(token)

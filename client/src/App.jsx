@@ -612,6 +612,7 @@ function HistoryPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const intervalRef = useRef(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
     let cancelled = false;
@@ -799,7 +800,7 @@ function ResultsPage() {
     }, RUN_POLL_INTERVAL_MS);
 
     return () => window.clearInterval(intervalId);
-  }, [data, page, runId, search, sentiment]);
+  }, [data, page, runId, search, sentiment, navigate]);
 
   useEffect(() => {
     if (!data) {
