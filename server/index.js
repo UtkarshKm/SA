@@ -224,8 +224,7 @@ function tokenize(text) {
     );
 }
 
-function extractTerms(text) {
-  const tokens = tokenize(text);
+function extractTerms(tokens) {
   const terms = [];
 
   for (let index = 0; index < tokens.length; index += 1) {
@@ -357,11 +356,12 @@ function buildVisualizations(rows, category) {
 
   for (const row of rows) {
     const sentiment = row.predicted_label;
-    const terms = extractTerms(row.clean_text);
+    const tokens = tokenize(row.clean_text);
+    const terms = extractTerms(tokens);
     const lengthStats = lengthStatsMap.get(sentiment);
 
     if (lengthStats) {
-      lengthStats.totalWords += tokenize(row.clean_text).length;
+      lengthStats.totalWords += tokens.length;
       lengthStats.reviews += 1;
     }
 
