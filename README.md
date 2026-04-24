@@ -1,4 +1,4 @@
-# Sentiment Analysis MVP
+# Sentiment Analysis
 
 A MongoDB-backed full-stack web app built from the original notebook workflow in [Sentimenatal_anaylsis.py](C:/Users/Public/Documents/LANGUAGE/final-project-S_A-28-March/Sentimenatal_anaylsis.py), now with Better Auth email/password authentication.
 
