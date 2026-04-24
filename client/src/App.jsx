@@ -433,8 +433,15 @@ function UploadPage() {
   useEffect(() => {
     apiFetch("/api/config")
       .then((data) => setCategories(data.categories || ["CLOTHING"]))
-      .catch((loadError) => setError(loadError.message));
-  }, []);
+      .catch((loadError) => {
+        if (loadError.status === 401) {
+          navigate("/sign-in", { replace: true });
+          return;
+        }
+
+        setError(loadError.message);
+      });
+  }, [navigate]);
 
   async function handleFileChange(event) {
     const nextFile = event.target.files?.[0];
@@ -481,6 +488,11 @@ function UploadPage() {
 
       navigate(`/app/runs/${data.id}`);
     } catch (submissionError) {
+      if (submissionError.status === 401) {
+        navigate("/sign-in", { replace: true });
+        return;
+      }
+
       setError(submissionError.message);
     } finally {
       setSubmitting(false);
@@ -600,6 +612,7 @@ function HistoryPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const intervalRef = useRef(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
     let cancelled = false;
@@ -613,6 +626,11 @@ function HistoryPage() {
         }
       } catch (loadError) {
         if (!cancelled) {
+          if (loadError.status === 401) {
+            navigate("/sign-in", { replace: true });
+            return;
+          }
+
           setError(loadError.message);
         }
       } finally {
@@ -656,7 +674,7 @@ function HistoryPage() {
       stopPolling();
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, []);
+  }, [navigate]);
 
   return (
     <section className="scene">
@@ -772,14 +790,17 @@ function ResultsPage() {
         setData(payload);
         setError("");
       } catch (pollError) {
-        if (pollError.status !== 401) {
-          setError(pollError.message);
+        if (pollError.status === 401) {
+          navigate("/sign-in", { replace: true });
+          return;
         }
+
+        setError(pollError.message);
       }
     }, RUN_POLL_INTERVAL_MS);
 
     return () => window.clearInterval(intervalId);
-  }, [data, page, runId, search, sentiment]);
+  }, [data, page, runId, search, sentiment, navigate]);
 
   useEffect(() => {
     if (!data) {
