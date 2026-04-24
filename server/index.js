@@ -129,46 +129,25 @@ const STOPWORDS = new Set([
 
 const DOMAIN_STOPWORDS = new Set([
   "amazon",
-  "best",
-  "bought",
-  "buy",
-  "buying",
-  "cast",
   "customer",
   "customers",
   "delivery",
-  "don",
-  "expected",
-  "fake",
-  "good",
-  "great",
   "item",
   "items",
-  "money",
-  "must",
-  "nice",
   "order",
   "ordered",
-  "original",
-  "perfect",
-  "poor",
-  "price",
-  "product",
-  "products",
   "purchase",
   "purchased",
-  "quality",
   "report",
   "received",
+  "refund",
   "seller",
   "sellers",
-  "shoe",
-  "shoes",
-  "size",
-  "value",
-  "verified",
-  "you"
+  "verified"
 ]);
+
+const NEGATION_WORDS = new Set(["not", "never", "no", "hardly", "barely", "without", "isnt", "wasnt", "dont", "didnt", "cant", "couldnt", "wont"]);
+const MAX_DOCUMENT_FREQUENCY_RATIO = 0.6;
 
 const app = express();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -237,9 +216,35 @@ function tokenize(text) {
       (token) =>
         token.length >= 3 &&
         /^[a-z][a-z0-9]*$/i.test(token) &&
-        !STOPWORDS.has(token) &&
+        (!STOPWORDS.has(token) || NEGATION_WORDS.has(token)) &&
         !DOMAIN_STOPWORDS.has(token)
     );
+}
+
+function extractTerms(text) {
+  const tokens = tokenize(text);
+  const terms = [];
+
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index];
+    terms.push(token);
+
+    const nextToken = tokens[index + 1];
+    if (!nextToken) {
+      continue;
+    }
+
+    if (NEGATION_WORDS.has(token)) {
+      terms.push(`${token}_${nextToken}`);
+      continue;
+    }
+
+    if (!NEGATION_WORDS.has(nextToken)) {
+      terms.push(`${token}_${nextToken}`);
+    }
+  }
+
+  return terms;
 }
 
 function buildTokenList(counter, limit = 12) {
@@ -260,7 +265,7 @@ function buildWordCloudList(counter, limit = 36) {
   }));
 }
 
-function buildDistinctiveWordCloud(counter, tokenCounters, tokenTotals, sentiment, limit = 36) {
+function buildDistinctiveWordCloud(counter, tokenCounters, tokenTotals, sentiment, allowedTerms, limit = 36) {
   const targetTotal = tokenTotals[sentiment] || 0;
 
   if (targetTotal === 0) {
@@ -271,6 +276,7 @@ function buildDistinctiveWordCloud(counter, tokenCounters, tokenTotals, sentimen
   const otherTotal = otherSentiments.reduce((sum, item) => sum + (tokenTotals[item] || 0), 0);
 
   const ranked = [...counter.entries()]
+    .filter(([text]) => allowedTerms.has(text))
     .map(([text, count]) => {
       const targetRate = count / targetTotal;
       const competingCount = otherSentiments.reduce((sum, item) => sum + (tokenCounters[item].get(text) || 0), 0);
@@ -288,7 +294,7 @@ function buildDistinctiveWordCloud(counter, tokenCounters, tokenTotals, sentimen
     .slice(0, limit);
 
   if (ranked.length === 0) {
-    return buildWordCloudList(counter, limit);
+    return buildWordCloudList(new Map([...counter.entries()].filter(([text]) => allowedTerms.has(text))), limit);
   }
 
   const maxScore = ranked[0]?.score || 1;
@@ -298,6 +304,14 @@ function buildDistinctiveWordCloud(counter, tokenCounters, tokenTotals, sentimen
     value: item.count,
     weight: Number((item.score / maxScore).toFixed(3))
   }));
+}
+
+function selectWordCloudTerms(documentFrequency, totalReviews) {
+  return new Set(
+    [...documentFrequency.entries()]
+      .filter(([, count]) => count >= 2 && count / Math.max(totalReviews, 1) <= MAX_DOCUMENT_FREQUENCY_RATIO)
+      .map(([term]) => term)
+  );
 }
 
 function buildVisualizations(rows) {
@@ -320,20 +334,24 @@ function buildVisualizations(rows) {
     NEUTRAL: 0,
     NEGATIVE: 0
   };
+  const documentFrequency = new Map();
 
   for (const row of rows) {
     const sentiment = row.predicted_label;
-    const tokens = tokenize(row.clean_text);
+    const terms = extractTerms(row.clean_text);
     const lengthStats = lengthStatsMap.get(sentiment);
 
     if (lengthStats) {
-      lengthStats.totalWords += tokens.length;
+      lengthStats.totalWords += tokenize(row.clean_text).length;
       lengthStats.reviews += 1;
     }
 
-    for (const token of tokens) {
-      tokenCounters.ALL.set(token, (tokenCounters.ALL.get(token) || 0) + 1);
-      tokenCounters[sentiment].set(token, (tokenCounters[sentiment].get(token) || 0) + 1);
+    const uniqueTerms = new Set(terms);
+
+    for (const term of uniqueTerms) {
+      documentFrequency.set(term, (documentFrequency.get(term) || 0) + 1);
+      tokenCounters.ALL.set(term, (tokenCounters.ALL.get(term) || 0) + 1);
+      tokenCounters[sentiment].set(term, (tokenCounters[sentiment].get(term) || 0) + 1);
       tokenTotals.ALL += 1;
       tokenTotals[sentiment] += 1;
     }
@@ -370,6 +388,7 @@ function buildVisualizations(rows) {
     averageWords: item.reviews === 0 ? 0 : Number((item.totalWords / item.reviews).toFixed(1)),
     reviews: item.reviews
   }));
+  const allowedTerms = selectWordCloudTerms(documentFrequency, rows.length);
 
   return {
     aspectSentiment,
@@ -384,10 +403,10 @@ function buildVisualizations(rows) {
       { name: "Without aspects", value: coverage.withoutAspects }
     ],
     wordCloud: {
-      ALL: buildWordCloudList(tokenCounters.ALL),
-      POSITIVE: buildDistinctiveWordCloud(tokenCounters.POSITIVE, tokenCounters, tokenTotals, "POSITIVE"),
-      NEUTRAL: buildDistinctiveWordCloud(tokenCounters.NEUTRAL, tokenCounters, tokenTotals, "NEUTRAL"),
-      NEGATIVE: buildDistinctiveWordCloud(tokenCounters.NEGATIVE, tokenCounters, tokenTotals, "NEGATIVE")
+      ALL: buildWordCloudList(new Map([...tokenCounters.ALL.entries()].filter(([text]) => allowedTerms.has(text)))),
+      POSITIVE: buildDistinctiveWordCloud(tokenCounters.POSITIVE, tokenCounters, tokenTotals, "POSITIVE", allowedTerms),
+      NEUTRAL: buildDistinctiveWordCloud(tokenCounters.NEUTRAL, tokenCounters, tokenTotals, "NEUTRAL", allowedTerms),
+      NEGATIVE: buildDistinctiveWordCloud(tokenCounters.NEGATIVE, tokenCounters, tokenTotals, "NEGATIVE", allowedTerms)
     }
   };
 }
