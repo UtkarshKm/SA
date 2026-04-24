@@ -148,6 +148,9 @@ const DOMAIN_STOPWORDS = new Set([
 
 const NEGATION_WORDS = new Set(["not", "never", "no", "hardly", "barely", "without", "isnt", "wasnt", "dont", "didnt", "cant", "couldnt", "wont"]);
 const MAX_DOCUMENT_FREQUENCY_RATIO = 0.6;
+const CATEGORY_NOISE_TERMS = {
+  CLOTHING: new Set(["product", "products", "shoe", "shoes"])
+};
 
 const app = express();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -265,6 +268,17 @@ function buildWordCloudList(counter, limit = 36) {
   }));
 }
 
+function isAllowedCloudTerm(term, category) {
+  const categoryNoise = CATEGORY_NOISE_TERMS[category] || new Set();
+  const parts = term.split("_");
+
+  if (parts.length === 1) {
+    return !categoryNoise.has(term);
+  }
+
+  return !parts.every((part) => categoryNoise.has(part));
+}
+
 function buildDistinctiveWordCloud(counter, tokenCounters, tokenTotals, sentiment, allowedTerms, limit = 36) {
   const targetTotal = tokenTotals[sentiment] || 0;
 
@@ -306,15 +320,20 @@ function buildDistinctiveWordCloud(counter, tokenCounters, tokenTotals, sentimen
   }));
 }
 
-function selectWordCloudTerms(documentFrequency, totalReviews) {
+function selectWordCloudTerms(documentFrequency, totalReviews, category) {
   return new Set(
     [...documentFrequency.entries()]
-      .filter(([, count]) => count >= 2 && count / Math.max(totalReviews, 1) <= MAX_DOCUMENT_FREQUENCY_RATIO)
+      .filter(
+        ([term, count]) =>
+          count >= 2 &&
+          count / Math.max(totalReviews, 1) <= MAX_DOCUMENT_FREQUENCY_RATIO &&
+          isAllowedCloudTerm(term, category)
+      )
       .map(([term]) => term)
   );
 }
 
-function buildVisualizations(rows) {
+function buildVisualizations(rows, category) {
   const aspectSentimentMap = new Map();
   const coverage = { withAspects: 0, withoutAspects: 0 };
   const lengthStatsMap = new Map([
@@ -388,7 +407,7 @@ function buildVisualizations(rows) {
     averageWords: item.reviews === 0 ? 0 : Number((item.totalWords / item.reviews).toFixed(1)),
     reviews: item.reviews
   }));
-  const allowedTerms = selectWordCloudTerms(documentFrequency, rows.length);
+  const allowedTerms = selectWordCloudTerms(documentFrequency, rows.length, category);
 
   return {
     aspectSentiment,
@@ -421,7 +440,7 @@ function buildProgressOnlyResponse(run) {
 
 function buildRunResponse(run, pageParams) {
   const hasCompletedResults = run.status === "completed" && Array.isArray(run.rows) && run.rows.length > 0;
-  const visualizations = hasCompletedResults ? buildVisualizations(run.rows) : null;
+  const visualizations = hasCompletedResults ? buildVisualizations(run.rows, run.category) : null;
 
   return {
     ...run,
